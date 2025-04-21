@@ -7,14 +7,24 @@
 
 package im.vector.app.features.home.room.detail
 
+import android.annotation.SuppressLint
+import android.app.Dialog
+import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
+import android.view.MotionEvent
+import android.view.View
+import android.view.ViewGroup
 import androidx.activity.result.ActivityResultLauncher
 import androidx.fragment.app.Fragment
+import com.airbnb.lottie.LottieAnimationView
 import com.airbnb.mvrx.withState
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import im.vector.app.R
 import im.vector.app.core.utils.PERMISSIONS_FOR_AUDIO_IP_CALL
 import im.vector.app.core.utils.PERMISSIONS_FOR_VIDEO_IP_CALL
 import im.vector.app.core.utils.checkPermissions
 import im.vector.app.features.call.webrtc.WebRtcCallManager
+import im.vector.app.features.home.room.detail.composer.voice.VoiceMessageRecorderView
 import im.vector.app.features.settings.VectorPreferences
 import im.vector.lib.strings.CommonStrings
 
@@ -35,6 +45,58 @@ class StartCallActionsHandler(
 
     fun onVoiceCallClicked() {
         handleCallRequest(false)
+    }
+
+    @SuppressLint("InflateParams","ClickableViewAccessibility")
+    fun onVoiceSoundClicked() {
+        val dialogView = fragment.layoutInflater.inflate(R.layout.dialog_push_to_talk, null)
+//        val dialog = MaterialAlertDialogBuilder(fragment.requireContext())
+//                .setView(dialogView)
+//                .setCancelable(true)
+//                .create()
+        val dialog = Dialog(fragment.requireContext())
+
+
+        dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT)) // Make background transparent
+
+        dialog.setContentView(dialogView)
+
+
+
+        dialog.setOnShowListener {
+            val btnRecord = dialogView.findViewById<View>(R.id.btn_record)
+            val waveAnimation = dialogView.findViewById<LottieAnimationView>(R.id.wave_animation)
+
+            // Get the VoiceMessageRecorderView to trigger existing recording functions
+            val voiceMessageRecorderView = fragment.view?.findViewById<VoiceMessageRecorderView>(R.id.voiceMessageRecorderView)
+
+            btnRecord.setOnTouchListener { _, event ->
+                when (event.action) {
+                    MotionEvent.ACTION_DOWN -> {
+                        // Start recording using the existing function
+                        voiceMessageRecorderView?.callback?.onVoiceRecordingStarted()
+                        waveAnimation.visibility = View.VISIBLE
+                        waveAnimation.playAnimation()
+                        true
+                    }
+
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                        // Stop recording and send the voice message using the existing function
+                        voiceMessageRecorderView?.callback?.onVoiceRecordingEnded()
+                        waveAnimation.pauseAnimation()
+                        waveAnimation.visibility = View.GONE
+                        true
+                    }
+                    else -> false
+                }
+            }
+        }
+
+        dialog.show()
+        dialog.window?.setLayout(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+        )
     }
 
     private fun handleCallRequest(isVideoCall: Boolean) = withState(timelineViewModel) { state ->

@@ -824,6 +824,7 @@ class TimelineFragment :
             }
             menu.findItem(R.id.video_call).icon?.alpha = if (callButtonsEnabled) 0xFF else 0x40
             menu.findItem(R.id.voice_call).icon?.alpha = if (callButtonsEnabled || state.hasActiveElementCallWidget()) 0xFF else 0x40
+//            menu.findItem(R.id.voice_sound).icon?.alpha = if (callButtonsEnabled) 0xFF else 0x40
 
             val matrixAppsMenuItem = menu.findItem(R.id.open_matrix_apps)
             val widgetsCount = state.activeRoomWidgets.invoke()?.size ?: 0
@@ -871,6 +872,10 @@ class TimelineFragment :
             }
             R.id.video_call -> {
                 callActionsHandler.onVideoCallClicked()
+                true
+            }
+            R.id.voice_sound -> {
+                callActionsHandler.onVoiceSoundClicked()
                 true
             }
             R.id.menu_timeline_thread_list -> {

@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:background="@android:color/transparent">
+
+    <FrameLayout
+        android:id="@+id/record_btn_wrapper"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content">
+
+        <!-- Wave animation -->
+        <com.airbnb.lottie.LottieAnimationView
+            android:id="@+id/wave_animation"
+            android:layout_width="200dp"
+            android:layout_height="200dp"
+            android:layout_gravity="center"
+            app:lottie_autoPlay="false"
+            app:lottie_rawRes="@raw/wave_animation"
+            app:lottie_loop="true" />
+
+        <!-- Push-to-talk button -->
+        <Button
+            android:id="@+id/btn_record"
+
+            android:layout_width="120dp"
+            android:layout_height="120dp"
+            android:text="Hold"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:insetLeft="0dp"
+            android:insetRight="0dp"
+            app:iconGravity="textStart"
+            android:backgroundTint="@color/key_share_req_accent_color"
+            android:textSize="16sp"
+            android:layout_gravity="center"
+            app:cornerRadius="100dp"
+            android:gravity="center" />
+    </FrameLayout>
+</LinearLayout>

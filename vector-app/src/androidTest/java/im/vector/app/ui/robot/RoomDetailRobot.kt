@@ -54,6 +54,8 @@ class RoomDetailRobot {
         pressBack()
         clickMenu(R.id.video_call)
         pressBack()
+//      clickMenu(R.id.voice_sound)
+//      pressBack()
     }
 
     fun replyToThread(message: String) {

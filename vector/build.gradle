@@ -217,6 +217,9 @@ dependencies {
     // Alerter
     implementation 'com.github.tapadoo:alerter:7.2.4'
 
+    implementation "com.airbnb.android:lottie:6.0.0"
+
+
     // Shake detection
     implementation 'com.squareup:seismic:1.0.3'
 

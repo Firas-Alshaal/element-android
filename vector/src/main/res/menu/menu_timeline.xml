@@ -22,6 +22,16 @@
 
     <!-- We always want to show this item as an icon -->
     <item
+        android:id="@+id/voice_sound"
+        android:icon="@drawable/e2e_warning"
+        android:title="@string/option_send_voice"
+        android:visible="false"
+        app:iconTint="@color/key_share_req_accent_color"
+        app:showAsAction="always"
+        tools:visible="true" />
+
+    <!-- We always want to show this item as an icon -->
+    <item
         android:id="@+id/video_call"
         android:icon="@drawable/ic_video"
         android:title="@string/action_video_call"

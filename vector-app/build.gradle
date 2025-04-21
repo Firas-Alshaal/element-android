@@ -247,7 +247,7 @@ android {
         debug {
             applicationIdSuffix ".debug"
             signingConfig signingConfigs.debug
-            resValue "string", "app_name", "Element - dbg"
+            resValue "string", "app_name", "Atlas Talk"
 
             if (project.hasProperty("coverage")) {
                 testCoverageEnabled = project.coverage == "true"
@@ -255,7 +255,7 @@ android {
         }
 
         release {
-            resValue "string", "app_name", "Element"
+            resValue "string", "app_name", "Atlas Talk"
             postprocessing {
                 // FIXME Set to true.
                 removeUnusedCode false
@@ -385,6 +385,8 @@ dependencies {
     implementation project(':vector-config')
     implementation project(':library:core-utils')
     implementation project(':library:ui-strings')
+    implementation "com.airbnb.android:lottie:6.0.0"
+
     debugImplementation project(':library:external:span')
     debugImplementation project(':library:ui-styles')
     implementation libs.dagger.hilt
