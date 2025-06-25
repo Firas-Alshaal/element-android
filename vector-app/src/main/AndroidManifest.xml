@@ -5,6 +5,7 @@
     <application
         android:name="im.vector.app.VectorApplication"
         android:allowBackup="false"
+        android:usesCleartextTraffic="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
         android:hasFragileUserData="true"
@@ -69,6 +70,23 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/sdk_provider_paths" />
         </provider>
+
+        <service
+            android:name="im.vector.app.push.fcm.VectorFirebaseMessagingService"
+            android:exported="true"
+            tools:replace="android:exported">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
+        <service
+            android:name="im.vector.app.push.fcm.AudioPlaybackService"
+            android:foregroundServiceType="mediaPlayback"
+            android:exported="false"/>
+
+        <receiver android:name="im.vector.app.push.fcm.NotificationDismissReceiver"
+            android:exported="false" />
 
     </application>
 

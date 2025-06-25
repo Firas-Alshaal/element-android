@@ -16,6 +16,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.airbnb.epoxy.EpoxyController
 import com.airbnb.epoxy.EpoxyModel
 import com.airbnb.epoxy.VisibilityState
+import com.google.firebase.firestore.FirebaseFirestore
 import im.vector.app.core.date.DateFormatKind
 import im.vector.app.core.date.VectorDateFormatter
 import im.vector.app.core.epoxy.LoadingItem_
@@ -26,6 +27,7 @@ import im.vector.app.features.home.AvatarRenderer
 import im.vector.app.features.home.room.detail.JitsiState
 import im.vector.app.features.home.room.detail.RoomDetailAction
 import im.vector.app.features.home.room.detail.RoomDetailViewState
+import im.vector.app.features.home.room.detail.TimelineFragment
 import im.vector.app.features.home.room.detail.UnreadState
 import im.vector.app.features.home.room.detail.timeline.factory.MergedHeaderItemFactory
 import im.vector.app.features.home.room.detail.timeline.factory.ReadReceiptsItemFactory
@@ -54,11 +56,16 @@ import im.vector.app.features.home.room.detail.timeline.url.PreviewUrlRetriever
 import im.vector.app.features.media.AttachmentData
 import im.vector.app.features.media.ImageContentRenderer
 import im.vector.app.features.media.VideoContentRenderer
+import im.vector.app.features.notifications.fetchMediaHttpUrl
+import im.vector.app.features.notifications.sendPttNotificationViaHttp
 import im.vector.app.features.settings.VectorPreferences
 import im.vector.lib.core.utils.timer.Clock
 import org.matrix.android.sdk.api.session.Session
+import org.matrix.android.sdk.api.session.events.model.Content
 import org.matrix.android.sdk.api.session.events.model.EventType
 import org.matrix.android.sdk.api.session.events.model.toModel
+import org.matrix.android.sdk.api.session.getRoom
+import org.matrix.android.sdk.api.session.room.members.RoomMemberQueryParams
 import org.matrix.android.sdk.api.session.room.model.Membership
 import org.matrix.android.sdk.api.session.room.model.ReadReceipt
 import org.matrix.android.sdk.api.session.room.model.RoomMemberContent
@@ -89,7 +96,8 @@ class TimelineEventController @Inject constructor(
         private val reactionListFactory: ReactionsSummaryFactory,
         private val clock: Clock,
         private val avatarRenderer: AvatarRenderer,
-) : EpoxyController(backgroundHandler, backgroundHandler), Timeline.Listener, EpoxyController.Interceptor {
+
+        ) : EpoxyController(backgroundHandler, backgroundHandler), Timeline.Listener, EpoxyController.Interceptor {
 
     /**
      * This is a partial state of the RoomDetailViewState.
@@ -111,6 +119,12 @@ class TimelineEventController @Inject constructor(
         )
 
         fun isFromThreadTimeline(): Boolean = rootThreadEventId != null
+    }
+
+    data class PushDedupKey(val eventId: String?, val mediaUrl: String?)
+
+    object SentPushEventStore {
+        val dedupKeys: MutableSet<PushDedupKey> = mutableSetOf()
     }
 
     interface Callback :
@@ -357,16 +371,123 @@ class TimelineEventController @Inject constructor(
     }
 
     private fun submitSnapshot(newSnapshot: List<TimelineEvent>) {
-        // Update is triggered on any DB change
         backgroundHandler.post {
             inSubmitList = true
             val diffCallback = TimelineEventDiffUtilCallback(currentSnapshot, newSnapshot)
+            val previousSnapshot = currentSnapshot
             currentSnapshot = newSnapshot
             Timber.v("Submit a new snapshot of ${currentSnapshot.size} items.")
+
+            // 🔍 Detect if any new PTT messages were sent
+            val previousMap = previousSnapshot.associateBy { it.root.eventId }
+            val newMessages = newSnapshot.filter { newEvent ->
+                val eventId = newEvent.root.eventId ?: return@filter false
+                val oldEvent = previousMap[eventId]
+                // New event OR event content has changed
+                oldEvent == null || oldEvent.root.getClearContent() != newEvent.root.getClearContent()
+            }
+
+            val newPttMessages = newMessages.filter {
+                it.root.senderId == session.myUserId && isPushToTalkVoice(it)
+            }
+            // ✅ Voice message received from someone else → auto-play
+//            val latestVoiceEvent = newMessages
+//                    .asReversed()
+//                    .firstOrNull { it.root.senderId != session.myUserId && isPushToTalkVoice(it) }
+
+//            latestVoiceEvent?.let {
+//                Timber.d("🔊 Auto-play voice: ${it.eventId}")
+//                (callback as? TimelineFragment)?.autoPlayLatestVoiceMessage(it)
+//            }
+
+            // ✅ Detect new voice message you just sent
+            newPttMessages
+                    .forEach { event ->
+
+                        val content = event.root.getClearContent() ?: return@forEach
+                        val mxcUrl = extractMxcUrl(content) ?: return@forEach
+                        val roomId = event.root.roomId ?: return@forEach
+
+                        val dedupKey = PushDedupKey(roomId, mxcUrl)
+                        if (!SentPushEventStore.dedupKeys.add(dedupKey)) {
+                            Timber.d("⏭️ Already sent push for $dedupKey")
+                            return@forEach
+                        }
+
+                        if ((callback as? TimelineFragment)?.isPushToTalkDialogShowing != true) return@forEach
+
+                        val mediaId = mxcUrl.removePrefix("mxc://").substringAfter("/")
+                        fetchMediaHttpUrl(mediaId) { httpUrl ->
+                            if (httpUrl == null) {
+                                Timber.e("❌ Failed to resolve HTTP link for mediaId=$mediaId")
+                                return@fetchMediaHttpUrl
+                            }
+
+                            val room = session.getRoom(roomId) ?: return@fetchMediaHttpUrl
+                            val queryParams = RoomMemberQueryParams.Builder()
+                                    .apply {
+                                        memberships = listOf(Membership.JOIN)
+                                        excludeSelf = true
+                                    }.build()
+
+                            val userIdsInRoom = room
+                                    .membershipService()
+                                    .getRoomMembers(queryParams)
+                                    .map { it.userId }
+
+                            FirebaseFirestore.getInstance()
+                                    .collection("user_push_tokens")
+                                    .get()
+                                    .addOnSuccessListener { snapshot ->
+                                        userIdsInRoom.forEach { userId ->
+                                            val receiverPushKey = snapshot.documents
+                                                    .firstOrNull { it.id == userId }
+                                                    ?.getString("fcmToken")
+
+                                            if (!receiverPushKey.isNullOrEmpty()) {
+                                                Timber.w("⚠️ FCM token found for user: $userId")
+                                                sendPttNotificationViaHttp(
+                                                        httpUrl,
+                                                        event.root.roomId!!,
+                                                        receiverPushKey,
+                                                        session
+                                                )
+                                            } else {
+                                                Timber.w("⚠️ No FCM token found for user: $userId")
+                                            }
+                                        }
+                                    }
+                                    .addOnFailureListener {
+                                        Timber.e(it, "❌ Failed to fetch user FCM tokens from Firestore")
+                                    }
+
+                        }
+
+                    }
+            // ✅ Always update the UI as in the original method
+
             val diffResult = DiffUtil.calculateDiff(diffCallback)
             diffResult.dispatchUpdatesTo(listUpdateCallback)
             requestDelayedModelBuild(0)
             inSubmitList = false
+        }
+    }
+
+    private fun isPushToTalkVoice(event: TimelineEvent): Boolean {
+        val content = event.root.getClearContent() ?: return false
+        val isVoice = content["msgtype"]?.toString() == "m.audio"
+        val isPTT = content["type"]?.toString()?.equals("push_to_talk", ignoreCase = true) == true
+        return isVoice && isPTT
+    }
+
+    private fun extractMxcUrl(content: Content?): String? {
+        if (content == null) return null
+        return when {
+            content["file"] is Map<*, *> -> {
+                (content["file"] as? Map<*, *>)?.get("url")?.toString()
+            }
+            content["url"] is String -> content["url"].toString()
+            else -> null
         }
     }
 

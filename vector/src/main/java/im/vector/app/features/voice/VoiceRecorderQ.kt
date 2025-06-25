@@ -24,4 +24,9 @@ class VoiceRecorderQ(context: Context) : AbstractVoiceRecorderQ(context) {
     override val audioEncoder = MediaRecorder.AudioEncoder.OPUS
 
     override val fileNameExt: String = "ogg"
+
+//    override val outputFormat = MediaRecorder.OutputFormat.MPEG_4
+//    override val audioEncoder = MediaRecorder.AudioEncoder.AAC
+//
+//    override val fileNameExt: String = "m4a"
 }

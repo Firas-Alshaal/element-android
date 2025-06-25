@@ -7,6 +7,7 @@
 
 package im.vector.app.features.home.room.detail.composer
 
+import android.content.Context
 import im.vector.app.core.platform.VectorViewModelAction
 import im.vector.app.features.command.ParsedCommand
 import im.vector.app.features.home.room.detail.composer.voice.VoiceMessageRecorderView
@@ -30,7 +31,7 @@ sealed class MessageComposerAction : VectorViewModelAction {
     data class InitializeVoiceRecorder(val attachmentData: ContentAttachmentData) : MessageComposerAction()
     data class OnVoiceRecordingUiStateChanged(val uiState: VoiceMessageRecorderView.RecordingUiState) : MessageComposerAction()
     object StartRecordingVoiceMessage : MessageComposerAction()
-    data class EndRecordingVoiceMessage(val isCancelled: Boolean, val rootThreadEventId: String?) : MessageComposerAction()
+    data class EndRecordingVoiceMessage(val context: Context, val isCancelled: Boolean, val rootThreadEventId: String?,val isPushToTalk: Boolean? = null ) : MessageComposerAction()
     object PauseRecordingVoiceMessage : MessageComposerAction()
     data class PlayOrPauseVoicePlayback(val eventId: String, val messageAudioContent: MessageAudioContent) : MessageComposerAction()
     object PlayOrPauseRecordingPlayback : MessageComposerAction()

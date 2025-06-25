@@ -7,6 +7,8 @@
 
 package im.vector.app.features.home.room.detail.composer
 
+import android.content.Context
+import android.net.Uri
 import android.text.SpannableString
 import androidx.lifecycle.asFlow
 import com.airbnb.mvrx.MavericksViewModelFactory
@@ -30,6 +32,7 @@ import im.vector.app.features.home.room.detail.ChatEffect
 import im.vector.app.features.home.room.detail.composer.rainbow.RainbowGenerator
 import im.vector.app.features.home.room.detail.composer.voice.VoiceMessageRecorderView
 import im.vector.app.features.home.room.detail.toMessageType
+import im.vector.app.features.notifications.uploadVoiceFileToSynapse
 import im.vector.app.features.powerlevel.PowerLevelsFlowFactory
 import im.vector.app.features.session.coroutineScope
 import im.vector.app.features.settings.VectorPreferences
@@ -78,6 +81,9 @@ import org.matrix.android.sdk.api.util.Optional
 import org.matrix.android.sdk.flow.flow
 import org.matrix.android.sdk.flow.unwrap
 import timber.log.Timber
+import java.io.File
+import java.io.FileOutputStream
+import java.io.IOException
 
 class MessageComposerViewModel @AssistedInject constructor(
         @Assisted initialState: MessageComposerViewState,
@@ -121,7 +127,13 @@ class MessageComposerViewModel @AssistedInject constructor(
             is MessageComposerAction.OnTextChanged -> handleOnTextChanged(action)
             is MessageComposerAction.OnVoiceRecordingUiStateChanged -> handleOnVoiceRecordingUiStateChanged(action)
             is MessageComposerAction.StartRecordingVoiceMessage -> handleStartRecordingVoiceMessage(room)
-            is MessageComposerAction.EndRecordingVoiceMessage -> handleEndRecordingVoiceMessage(room, action.isCancelled, action.rootThreadEventId)
+            is MessageComposerAction.EndRecordingVoiceMessage -> handleEndRecordingVoiceMessage(
+                    action.context,
+                    room,
+                    action.isCancelled,
+                    action.rootThreadEventId,
+                    action.isPushToTalk
+            )
             is MessageComposerAction.PlayOrPauseVoicePlayback -> handlePlayOrPauseVoicePlayback(action)
             MessageComposerAction.PauseRecordingVoiceMessage -> handlePauseRecordingVoiceMessage()
             MessageComposerAction.PlayOrPauseRecordingPlayback -> handlePlayOrPauseRecordingPlayback()
@@ -935,21 +947,75 @@ class MessageComposerViewModel @AssistedInject constructor(
         }
     }
 
-    private fun handleEndRecordingVoiceMessage(room: Room, isCancelled: Boolean, rootThreadEventId: String? = null) {
+    private fun handleEndRecordingVoiceMessage(
+            context: Context,
+            room: Room,
+            isCancelled: Boolean,
+            rootThreadEventId: String? = null,
+            isPushToTalk: Boolean? = false
+    ) {
         audioMessageHelper.stopPlayback()
         if (isCancelled) {
             audioMessageHelper.deleteRecording()
-        } else {
-            audioMessageHelper.stopRecording()?.let { audioType ->
-                if (audioType.duration > 1000) {
+            return
+        }
+
+
+        audioMessageHelper.stopRecording()?.let { audioType ->
+            if (audioType.duration > 1000) {
+
+                if (isPushToTalk != true) {
+                    val attachment = audioType.toContentAttachmentData(isVoiceMessage = true)
+
                     room.sendService().sendMedia(
-                            attachment = audioType.toContentAttachmentData(isVoiceMessage = true),
+                            attachment = attachment,
                             compressBeforeSending = false,
                             roomIds = emptySet(),
                             rootThreadEventId = rootThreadEventId
                     )
+
+                    Timber.d("📨 Sent normal voice message with attachment=$attachment")
                 } else {
-                    audioMessageHelper.deleteRecording()
+                    val fileName = "voice.m4a"
+                    val mimeType = "audio/mp4"
+
+                    val file = File(context.cacheDir, fileName)
+                    try {
+                        context.contentResolver.openInputStream(audioType.contentUri)?.use { input ->
+                            FileOutputStream(file).use { output -> input.copyTo(output) }
+                        }
+                    } catch (e: IOException) {
+                        Timber.e(e, "Failed to copy audio recording to file")
+                        return
+                    }
+
+                    val contentUri = Uri.fromFile(file)
+                    viewModelScope.launch {
+                        try {
+                            val uploadResponse = uploadVoiceFileToSynapse(session,contentUri, mimeType, fileName)
+                            val mxcUri = uploadResponse.contentUri
+
+                            val content = mapOf(
+                                    "body" to fileName,
+                                    "msgtype" to "m.audio",
+                                    "url" to mxcUri,
+                                    "info" to mapOf(
+                                            "mimetype" to mimeType,
+                                            "duration" to audioType.duration,
+                                            "size" to file.length()
+                                    ),
+                                    "type" to "push_to_talk"
+                            )
+
+                            val result = room.sendService().sendEvent(
+                                    eventType = EventType.MESSAGE,
+                                    content = content,
+                            )
+                            Timber.d("📨 Sent PTT event with content=$content result=$result")
+                        } catch (e: Exception) {
+                            Timber.e(e, "PTT Upload failed")
+                        }
+                    }
                 }
             }
         }

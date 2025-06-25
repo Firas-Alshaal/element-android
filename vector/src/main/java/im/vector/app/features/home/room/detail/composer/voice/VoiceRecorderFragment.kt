@@ -22,6 +22,7 @@ import im.vector.app.core.utils.checkPermissions
 import im.vector.app.core.utils.onPermissionDeniedSnackbar
 import im.vector.app.core.utils.registerForPermissionsResult
 import im.vector.app.databinding.FragmentVoiceRecorderBinding
+import im.vector.app.features.home.room.detail.TimelineFragment
 import im.vector.app.features.home.room.detail.TimelineViewModel
 import im.vector.app.features.home.room.detail.composer.MessageComposerAction
 import im.vector.app.features.home.room.detail.composer.MessageComposerViewEvents
@@ -124,7 +125,13 @@ class VoiceRecorderFragment : VectorBaseFragment<FragmentVoiceRecorderBinding>()
             }
 
             override fun onVoiceRecordingCancelled() {
-                messageComposerViewModel.handle(MessageComposerAction.EndRecordingVoiceMessage(isCancelled = true, rootThreadEventId = getRootThreadEventId()))
+                messageComposerViewModel.handle(
+                        MessageComposerAction.EndRecordingVoiceMessage(
+                                context = requireContext(),
+                                isCancelled = true,
+                                rootThreadEventId = getRootThreadEventId()
+                        )
+                )
                 vibrate(requireContext())
                 updateRecordingUiState(VoiceMessageRecorderView.RecordingUiState.Idle)
             }
@@ -140,15 +147,26 @@ class VoiceRecorderFragment : VectorBaseFragment<FragmentVoiceRecorderBinding>()
             }
 
             override fun onSendVoiceMessage() {
+                val isPtt = (requireParentFragment() as? TimelineFragment)?.isPushToTalkDialogShowing
+
                 messageComposerViewModel.handle(
-                        MessageComposerAction.EndRecordingVoiceMessage(isCancelled = false, rootThreadEventId = getRootThreadEventId())
+                        MessageComposerAction.EndRecordingVoiceMessage(
+                                context = requireContext(),
+                                isCancelled = false,
+                                rootThreadEventId = getRootThreadEventId(),
+                                isPushToTalk = isPtt
+                        )
                 )
                 updateRecordingUiState(VoiceMessageRecorderView.RecordingUiState.Idle)
             }
 
             override fun onDeleteVoiceMessage() {
                 messageComposerViewModel.handle(
-                        MessageComposerAction.EndRecordingVoiceMessage(isCancelled = true, rootThreadEventId = getRootThreadEventId())
+                        MessageComposerAction.EndRecordingVoiceMessage(
+                                context = requireContext(),
+                                isCancelled = true,
+                                rootThreadEventId = getRootThreadEventId()
+                        )
                 )
                 updateRecordingUiState(VoiceMessageRecorderView.RecordingUiState.Idle)
             }

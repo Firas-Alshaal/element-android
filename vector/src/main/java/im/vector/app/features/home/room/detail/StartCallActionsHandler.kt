@@ -24,6 +24,7 @@ import im.vector.app.core.utils.PERMISSIONS_FOR_AUDIO_IP_CALL
 import im.vector.app.core.utils.PERMISSIONS_FOR_VIDEO_IP_CALL
 import im.vector.app.core.utils.checkPermissions
 import im.vector.app.features.call.webrtc.WebRtcCallManager
+import im.vector.app.features.home.room.detail.composer.MessageComposerViewModel
 import im.vector.app.features.home.room.detail.composer.voice.VoiceMessageRecorderView
 import im.vector.app.features.settings.VectorPreferences
 import im.vector.lib.strings.CommonStrings
@@ -34,9 +35,11 @@ class StartCallActionsHandler(
         private val callManager: WebRtcCallManager,
         private val vectorPreferences: VectorPreferences,
         private val timelineViewModel: TimelineViewModel,
+        private val messageComposerViewModel: MessageComposerViewModel,
         private val startCallActivityResultLauncher: ActivityResultLauncher<Array<String>>,
         private val showDialogWithMessage: (String) -> Unit,
-        private val onTapToReturnToCall: () -> Unit
+        private val onTapToReturnToCall: () -> Unit,
+        private val myUserId: String, // <-- add this
 ) {
 
     fun onVideoCallClicked() {
@@ -47,20 +50,14 @@ class StartCallActionsHandler(
         handleCallRequest(false)
     }
 
-    @SuppressLint("InflateParams","ClickableViewAccessibility")
+    @SuppressLint("InflateParams", "ClickableViewAccessibility")
     fun onVoiceSoundClicked() {
         val dialogView = fragment.layoutInflater.inflate(R.layout.dialog_push_to_talk, null)
-//        val dialog = MaterialAlertDialogBuilder(fragment.requireContext())
-//                .setView(dialogView)
-//                .setCancelable(true)
-//                .create()
         val dialog = Dialog(fragment.requireContext())
-
-
         dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT)) // Make background transparent
-
         dialog.setContentView(dialogView)
 
+        (fragment as? TimelineFragment)?.isPushToTalkDialogShowing = true
 
 
         dialog.setOnShowListener {
@@ -90,6 +87,11 @@ class StartCallActionsHandler(
                     else -> false
                 }
             }
+        }
+
+        dialog.setOnDismissListener {
+            // Reset flag when dialog is closed
+            (fragment as? TimelineFragment)?.isPushToTalkDialogShowing = false
         }
 
         dialog.show()

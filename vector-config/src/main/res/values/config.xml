@@ -6,6 +6,7 @@
     <!-- server urls -->
 <!--    <string name="matrix_org_server_url" translatable="false">http://192.168.82.115:8008</string>-->
     <string name="matrix_org_server_url" translatable="false">http://10.100.10.162:8008</string>
+<!--    <string name="matrix_org_server_url" translatable="false">http://2.50.159.120:8008</string>-->
 
     <!--https://matrix.org-->
 
@@ -23,7 +24,8 @@
     <!-- It is the push gateway for FCM embedded distributor -->
     <!--    <string name="pusher_http_url" translatable="false">https://matrix.org/_matrix/push/v1/notify</string>-->
 <!--    <string name="pusher_http_url" translatable="false">http://192.168.82.115:8008/_matrix/push/v1/notify</string>-->
-    <string name="pusher_http_url" translatable="false">http://10.100.10.162:8008/_matrix/push/v1/notify</string>
+    <string name="pusher_http_url" translatable="false">http://10.100.10.162:5000/_matrix/push/v1/notify</string>
+<!--    <string name="pusher_http_url" translatable="false">http://2.50.159.120:8008/_matrix/push/v1/notify</string>-->
     <!-- Note: default_push_gateway_http_url should have path '/_matrix/push/v1/notify' -->
     <!-- It is the push gateway for UnifiedPush -->
     <string name="default_push_gateway_http_url" translatable="false">https://matrix.gateway.unifiedpush.org/_matrix/push/v1/notify</string>
@@ -37,6 +39,7 @@
 <!--        <item>http://192.168.82.115:8008</item>-->
         <!--        <item>matrix.org</item>-->
         <item>http://10.100.10.162:8008</item>
+<!--        <item>http://2.50.159.120:8008</item>-->
         <item>gitter.im</item>
     </string-array>
 

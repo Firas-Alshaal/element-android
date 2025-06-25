@@ -24,6 +24,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import javax.inject.Inject
+import javax.inject.Provider
 
 /**
  * This class store the FCM token in SharedPrefs and ensure this token is retrieved.
@@ -33,7 +34,8 @@ class GoogleFcmHelper @Inject constructor(
         @ApplicationContext private val context: Context,
         @DefaultPreferences private val sharedPrefs: SharedPreferences,
         appScope: CoroutineScope,
-        private val coroutineDispatchers: CoroutineDispatchers
+        private val coroutineDispatchers: CoroutineDispatchers,
+        private val activeSessionHolderProvider: Provider<ActiveSessionHolder> // ✅ change this line
 ) : FcmHelper {
 
     private val scope = CoroutineScope(appScope.coroutineContext + coroutineDispatchers.io)
@@ -55,6 +57,8 @@ class GoogleFcmHelper @Inject constructor(
         }
     }
 
+
+
     override fun ensureFcmTokenIsRetrieved(pushersManager: PushersManager, registerPusher: Boolean) {
         // 'app should always check the device for a compatible Google Play services APK before accessing Google Play services features'
         if (checkPlayServices(context)) {
@@ -62,7 +66,16 @@ class GoogleFcmHelper @Inject constructor(
                 FirebaseMessaging.getInstance().token
                         .addOnSuccessListener { token ->
                             storeFcmToken(token)
+
+                            val userId = activeSessionHolderProvider.get().getSafeActiveSession()?.myUserId
+                            if (userId != null) {
+                                FirestoreHelper.saveUserPushToken(userId, token)
+                            } else {
+                                Timber.e("❌ No active session user ID found. Cannot save token to Firestore.")
+                            }
                             if (registerPusher) {
+                                Timber.d("📱 Device FCM token on startup: $token")
+
                                 scope.launch {
                                     pushersManager.enqueueRegisterPusherWithFcmKey(token)
                                 }

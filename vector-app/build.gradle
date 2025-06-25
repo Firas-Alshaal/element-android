@@ -256,15 +256,18 @@ android {
 
         release {
             resValue "string", "app_name", "Atlas Talk"
-            postprocessing {
-                // FIXME Set to true.
-                removeUnusedCode false
-                removeUnusedResources true
-                // We do not activate obfuscation as it makes it hard then to read crash reports, and it's a bit useless on an open source project :)
-                obfuscate false
-                optimizeCode true
-                proguardFiles 'proguard-rules.pro'
-            }
+            minifyEnabled false
+            shrinkResources false
+//            postprocessing {
+//                // FIXME Set to true.
+//                removeUnusedCode false
+//                minifyEnabled false
+//                removeUnusedResources true
+//                // We do not activate obfuscation as it makes it hard then to read crash reports, and it's a bit useless on an open source project :)
+//                obfuscate false
+//                optimizeCode true
+//                proguardFiles 'proguard-rules.pro'
+//            }
             // signingConfig signingConfigs.release
         }
 
@@ -406,12 +409,15 @@ dependencies {
     gplayImplementation "com.google.android.gms:play-services-location:21.3.0"
     // UnifiedPush gplay flavor only
     gplayImplementation platform(libs.google.firebaseBom)
+    gplayImplementation 'com.google.firebase:firebase-firestore-ktx:25.1.4'
+
     gplayImplementation(libs.google.messaging) {
         exclude group: 'com.google.firebase', module: 'firebase-core'
-        exclude group: 'com.google.firebase', module: 'firebase-analytics'
-        exclude group: 'com.google.firebase', module: 'firebase-measurement-connector'
+//        exclude group: 'com.google.firebase', module: 'firebase-analytics'
+//        exclude group: 'com.google.firebase', module: 'firebase-measurement-connector'
     }
 
+//    gplayImplementation "com.google.firebase:firebase-analytics-lite"
     // Nightly
     // API-only library
     gplayImplementation libs.google.appdistributionApi

@@ -94,3 +94,9 @@
 -dontwarn org.mozilla.javascript.**
 -dontwarn org.slf4j.**
 -dontwarn org.jspecify.annotations.NullMarked
+
+# --- Fix for R8 missing java.lang.reflect.AnnotatedType ---
+-keep class java.lang.reflect.AnnotatedType { *; }
+-keepclassmembers class * {
+    java.lang.reflect.AnnotatedType[] *;
+}

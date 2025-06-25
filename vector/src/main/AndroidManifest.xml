@@ -18,6 +18,7 @@
 
     <!-- https://developer.android.com/develop/ui/views/notifications/notification-permission#exemptions -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
 
     <!-- Call feature -->
     <uses-permission android:name="android.permission.MANAGE_OWN_CALLS" />
@@ -462,6 +463,17 @@
                 <action android:name="org.unifiedpush.android.distributor.REGISTER" />
             </intent-filter>
         </receiver>
+
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
     </application>
 
 </manifest>

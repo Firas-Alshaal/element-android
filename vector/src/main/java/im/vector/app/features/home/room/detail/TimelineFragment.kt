@@ -176,6 +176,7 @@ import im.vector.app.features.widgets.WidgetActivity
 import im.vector.app.features.widgets.WidgetArgs
 import im.vector.app.features.widgets.WidgetKind
 import im.vector.app.features.widgets.permissions.RoomWidgetPermissionBottomSheet
+import im.vector.app.push.fcm.AudioPlaybackService
 import im.vector.lib.core.utils.timer.Clock
 import im.vector.lib.strings.CommonStrings
 import kotlinx.coroutines.Dispatchers
@@ -203,6 +204,7 @@ import org.matrix.android.sdk.api.session.room.model.message.MessageWithAttachme
 import org.matrix.android.sdk.api.session.room.send.SendState
 import org.matrix.android.sdk.api.session.room.timeline.Timeline
 import org.matrix.android.sdk.api.session.room.timeline.TimelineEvent
+import org.matrix.android.sdk.api.session.room.timeline.getLastMessageContent
 import org.matrix.android.sdk.api.session.widgets.model.Widget
 import org.matrix.android.sdk.api.session.widgets.model.WidgetType
 import org.matrix.android.sdk.api.util.MatrixItem
@@ -252,6 +254,8 @@ class TimelineFragment :
     private lateinit var galleryOrCameraDialogHelper: GalleryOrCameraDialogHelper
 
     private val timelineArgs: TimelineArgs by args()
+
+    var isPushToTalkDialogShowing: Boolean = false
 
     private val timelineViewModel: TimelineViewModel by fragmentViewModel()
     private val messageComposerViewModel: MessageComposerViewModel by fragmentViewModel()
@@ -320,7 +324,9 @@ class TimelineFragment :
                 callManager = callManager,
                 startCallActivityResultLauncher = startCallActivityResultLauncher,
                 showDialogWithMessage = ::showDialogWithMessage,
-                onTapToReturnToCall = ::onTapToReturnToCall
+                onTapToReturnToCall = ::onTapToReturnToCall,
+                messageComposerViewModel = messageComposerViewModel,
+                myUserId = session.myUserId
         )
         keyboardStateUtils = KeyboardStateUtils(requireActivity())
         lazyLoadedViews.bind(views)
@@ -441,6 +447,32 @@ class TimelineFragment :
                 }
                 timelineViewModel.handle(RoomDetailAction.RemoveWidget(jitsiWidgetId))
             }
+        }
+    }
+
+    fun autoPlayLatestVoiceMessage(event: TimelineEvent) {
+        Timber.d("🔵 autoPlayLatestVoiceMessage triggered for event: ${event.eventId}")
+
+        val audioUrl = event.root.content?.get("audio_url")?.toString()
+        if (!audioUrl.isNullOrEmpty()) {
+            val context = requireContext()
+            val intent = Intent(requireContext(), AudioPlaybackService::class.java).apply {
+                putExtra("audio_url", audioUrl)
+            }
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                ContextCompat.startForegroundService(context, intent)
+            } else {
+                context.startService(intent)
+            }
+        } else {
+            Timber.w("⚠️ autoPlayLatestVoiceMessage: No audio_url found, falling back to ViewModel")
+
+            // Fallback: if MessageAudioContent is parsed
+            val content = event.getLastMessageContent() as? MessageAudioContent ?: return
+            messageComposerViewModel.handle(
+                    MessageComposerAction.PlayOrPauseVoicePlayback(event.eventId, content)
+            )
         }
     }
 

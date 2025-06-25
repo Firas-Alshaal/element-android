@@ -23,10 +23,10 @@
     <!-- We always want to show this item as an icon -->
     <item
         android:id="@+id/voice_sound"
-        android:icon="@drawable/e2e_warning"
+        android:icon="@drawable/ic_push_to_talk"
         android:title="@string/option_send_voice"
         android:visible="false"
-        app:iconTint="@color/key_share_req_accent_color"
+        app:iconTint="?colorPrimary"
         app:showAsAction="always"
         tools:visible="true" />
 
@@ -55,10 +55,11 @@
         android:id="@+id/menu_timeline_thread_list"
         android:title="@string/action_view_threads"
         android:visible="false"
+        android:enabled="false"
         app:actionLayout="@layout/view_thread_notification_badge"
         app:iconTint="?colorPrimary"
-        app:showAsAction="always"
-        tools:visible="true" />
+        app:showAsAction="never"
+        tools:visible="false" />
 
     <item
         android:id="@+id/join_conference"
@@ -70,7 +71,9 @@
         android:id="@+id/open_matrix_apps"
         android:title="@string/room_add_matrix_apps"
         app:actionLayout="@layout/custom_action_item_layout_badge"
-        app:showAsAction="ifRoom" />
+        tools:visible="false"
+        android:enabled="false"
+        app:showAsAction="never" />
 
     <item
         android:id="@+id/dev_tools"

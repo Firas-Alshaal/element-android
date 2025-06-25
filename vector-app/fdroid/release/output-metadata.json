@@ -11,7 +11,7 @@
       "type": "UNIVERSAL",
       "filters": [],
       "attributes": [],
-      "versionCode": 220134740,
+      "versionCode": 220671930,
       "versionName": "1.6.34-dev",
       "outputFile": "vector-fdroid-universal-release.apk"
     },
@@ -24,7 +24,7 @@
         }
       ],
       "attributes": [],
-      "versionCode": 220134741,
+      "versionCode": 220671931,
       "versionName": "1.6.34-dev",
       "outputFile": "vector-fdroid-armeabi-v7a-release.apk"
     },
@@ -37,7 +37,7 @@
         }
       ],
       "attributes": [],
-      "versionCode": 220134743,
+      "versionCode": 220671933,
       "versionName": "1.6.34-dev",
       "outputFile": "vector-fdroid-x86-release.apk"
     },
@@ -50,7 +50,7 @@
         }
       ],
       "attributes": [],
-      "versionCode": 220134742,
+      "versionCode": 220671932,
       "versionName": "1.6.34-dev",
       "outputFile": "vector-fdroid-arm64-v8a-release.apk"
     },
@@ -63,7 +63,7 @@
         }
       ],
       "attributes": [],
-      "versionCode": 220134744,
+      "versionCode": 220671934,
       "versionName": "1.6.34-dev",
       "outputFile": "vector-fdroid-x86_64-release.apk"
     }
