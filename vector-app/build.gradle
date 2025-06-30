@@ -256,18 +256,15 @@ android {
 
         release {
             resValue "string", "app_name", "Atlas Talk"
-            minifyEnabled false
-            shrinkResources false
-//            postprocessing {
-//                // FIXME Set to true.
-//                removeUnusedCode false
-//                minifyEnabled false
-//                removeUnusedResources true
-//                // We do not activate obfuscation as it makes it hard then to read crash reports, and it's a bit useless on an open source project :)
-//                obfuscate false
-//                optimizeCode true
-//                proguardFiles 'proguard-rules.pro'
-//            }
+            postprocessing {
+                // FIXME Set to true.
+                removeUnusedCode false
+                removeUnusedResources true
+                // We do not activate obfuscation as it makes it hard then to read crash reports, and it's a bit useless on an open source project :)
+                obfuscate false
+                optimizeCode true
+                proguardFiles 'proguard-rules.pro'
+            }
             // signingConfig signingConfigs.release
         }
 

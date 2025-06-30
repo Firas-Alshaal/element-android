@@ -121,6 +121,15 @@ allprojects {
         }
     }
 
+    configurations.all {
+        resolutionStrategy.eachDependency { details ->
+            if (details.requested.group == 'com.google.protobuf' &&
+                    details.requested.name == 'protobuf-lite') {
+                details.useTarget group: 'com.google.protobuf', name: 'protobuf-javalite', version: '3.25.5'
+            }
+        }
+    }
+
     tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).all {
         // Warnings are potential errors, so stop ignoring them
         // You can override by passing `-PallWarningsAsErrors=false` in the command line
