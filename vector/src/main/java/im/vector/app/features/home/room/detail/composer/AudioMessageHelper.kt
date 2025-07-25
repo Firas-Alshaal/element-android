@@ -6,7 +6,7 @@
  */
 
 package im.vector.app.features.home.room.detail.composer
-///
+
 import android.content.Context
 import android.media.AudioAttributes
 import android.media.MediaPlayer
