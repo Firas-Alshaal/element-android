@@ -7,8 +7,10 @@
 
 package im.vector.app.features.home.room.list
 
+import android.content.Context
 import android.os.Bundle
 import android.os.Parcelable
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -56,7 +58,20 @@ import org.matrix.android.sdk.api.session.room.model.RoomSummary
 import org.matrix.android.sdk.api.session.room.model.SpaceChildInfo
 import org.matrix.android.sdk.api.session.room.model.tag.RoomTag
 import org.matrix.android.sdk.api.session.room.notification.RoomNotificationState
+import timber.log.Timber
 import javax.inject.Inject
+import android.Manifest
+import android.widget.Toast
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContracts
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import org.matrix.android.sdk.api.query.QueryStringValue
+import org.matrix.android.sdk.api.session.events.model.toModel
+import org.matrix.android.sdk.api.session.getRoom
+import org.matrix.android.sdk.api.session.room.model.PowerLevelsContent
+import im.vector.app.core.di.ActiveSessionHolder
 
 @Parcelize
 data class RoomListParams(
@@ -75,6 +90,7 @@ class RoomListFragment :
     @Inject lateinit var notificationDrawerManager: NotificationDrawerManager
     @Inject lateinit var footerController: RoomListFooterController
     @Inject lateinit var userPreferencesProvider: UserPreferencesProvider
+    @Inject lateinit var activeSessionHolder: ActiveSessionHolder
 
     private var modelBuildListener: OnModelBuildFinishedListener? = null
     private lateinit var sharedActionViewModel: RoomListQuickActionsSharedActionViewModel
@@ -82,8 +98,65 @@ class RoomListFragment :
     private val roomListViewModel: RoomListViewModel by fragmentViewModel()
     private lateinit var stateRestorer: LayoutManagerStateRestorer
 
+    private lateinit var permissionLauncher: ActivityResultLauncher<Array<String>>
+    private var permissionGrantedCallback: ((Boolean) -> Unit)? = null
+
     override fun getBinding(inflater: LayoutInflater, container: ViewGroup?): FragmentRoomListBinding {
         return FragmentRoomListBinding.inflate(inflater, container, false)
+    }
+
+    override fun onStartPtt(roomId: String) {
+        // This method is called when PTT starts - you can add PTT manager logic here if needed
+        Timber.d("🎙️ Start PTT for room: $roomId")
+        // Note: PTT status sending is handled in HomeRoomListFragment
+    }
+
+    override fun onStopPtt(roomId: String) {
+        // This method is called when PTT stops - you can add PTT manager logic here if needed
+        Timber.d("🛑 Stop PTT for room: $roomId")
+        // Note: PTT status sending is handled in HomeRoomListFragment
+    }
+
+    override fun requestVoicePermission(context: Context, callback: (Boolean) -> Unit) {
+        permissionGrantedCallback = callback
+        permissionLauncher.launch(arrayOf(Manifest.permission.RECORD_AUDIO))
+    }
+
+    override fun checkPttPermissionAndStart(roomId: String, callback: (Boolean) -> Unit) {
+        Timber.d("🔍 Checking PTT permission for room: $roomId")
+
+        val session = activeSessionHolder.getActiveSession()
+        val room = session.getRoom(roomId) ?: return
+
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val stateKey = QueryStringValue.Equals("", QueryStringValue.Case.SENSITIVE)
+                val powerLevelsEvent = room.stateService().getStateEvent("m.room.power_levels", stateKey)
+                val powerLevels = powerLevelsEvent?.content?.toModel<PowerLevelsContent>()
+
+                val userLevel = powerLevels?.users?.get(session.myUserId) ?: powerLevels?.usersDefault ?: 0
+                val requiredLevel = powerLevels?.events?.get("ptt.status") ?: powerLevels?.stateDefault ?: 50
+
+                Timber.d("🔍 User level: $userLevel, Required level: $requiredLevel")
+
+                withContext(Dispatchers.Main) {
+                    if (userLevel >= requiredLevel) {
+                        Timber.d("✅ User has PTT permission")
+                        callback(true) // ✅ User has permission
+                    } else {
+                        Timber.w("❌ User doesn't have PTT permission")
+                        Toast.makeText(context, "You don't have permission to send voice in this room", Toast.LENGTH_LONG).show()
+                        callback(false) // ❌ User doesn't have permission
+                    }
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "❌ Error checking PTT permission")
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, "Error checking permissions", Toast.LENGTH_SHORT).show()
+                    callback(false)
+                }
+            }
+        }
     }
 
     data class SectionKey(
@@ -107,6 +180,12 @@ class RoomListFragment :
             RoomListDisplayMode.PEOPLE -> MobileScreen.ScreenName.People
             RoomListDisplayMode.ROOMS -> MobileScreen.ScreenName.Rooms
             else -> null
+        }
+
+        permissionLauncher = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
+            val granted = permissions[Manifest.permission.RECORD_AUDIO] == true
+            permissionGrantedCallback?.invoke(granted)
+            permissionGrantedCallback = null
         }
     }
 

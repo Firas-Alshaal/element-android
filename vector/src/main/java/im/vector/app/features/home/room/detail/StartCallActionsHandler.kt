@@ -9,6 +9,7 @@ package im.vector.app.features.home.room.detail
 
 import android.annotation.SuppressLint
 import android.app.Dialog
+import android.content.Intent
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
 import android.view.MotionEvent
@@ -25,9 +26,16 @@ import im.vector.app.core.utils.PERMISSIONS_FOR_VIDEO_IP_CALL
 import im.vector.app.core.utils.checkPermissions
 import im.vector.app.features.call.webrtc.WebRtcCallManager
 import im.vector.app.features.home.room.detail.composer.MessageComposerViewModel
-import im.vector.app.features.home.room.detail.composer.voice.VoiceMessageRecorderView
+import im.vector.app.features.home.room.detail.composer.PttManager
+import im.vector.app.features.home.room.detail.composer.PttReceiverService
 import im.vector.app.features.settings.VectorPreferences
 import im.vector.lib.strings.CommonStrings
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import org.matrix.android.sdk.api.session.Session
+import org.matrix.android.sdk.api.session.getRoom
+import timber.log.Timber
 
 class StartCallActionsHandler(
         private val roomId: String,
@@ -40,6 +48,8 @@ class StartCallActionsHandler(
         private val showDialogWithMessage: (String) -> Unit,
         private val onTapToReturnToCall: () -> Unit,
         private val myUserId: String, // <-- add this
+        private val session: Session,
+        private val pttManager: PttManager = PttManager(context = fragment.requireContext(), session = session)
 ) {
 
     fun onVideoCallClicked() {
@@ -48,6 +58,23 @@ class StartCallActionsHandler(
 
     fun onVoiceCallClicked() {
         handleCallRequest(false)
+    }
+
+    private fun sendPttStatus(status: String) {
+        val content = mapOf(
+                "status" to status,
+                "userId" to myUserId
+        )
+
+        val room = session.getRoom(roomId) ?: return
+
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                room.stateService().sendStateEvent("ptt.status", myUserId, content)
+            } catch (e: Exception) {
+                Timber.e(e, "❌ Failed to send ptt.status")
+            }
+        }
     }
 
     @SuppressLint("InflateParams", "ClickableViewAccessibility")
@@ -65,13 +92,27 @@ class StartCallActionsHandler(
             val waveAnimation = dialogView.findViewById<LottieAnimationView>(R.id.wave_animation)
 
             // Get the VoiceMessageRecorderView to trigger existing recording functions
-            val voiceMessageRecorderView = fragment.view?.findViewById<VoiceMessageRecorderView>(R.id.voiceMessageRecorderView)
+//            val voiceMessageRecorderView = fragment.view?.findViewById<VoiceMessageRecorderView>(R.id.voiceMessageRecorderView)
 
             btnRecord.setOnTouchListener { _, event ->
                 when (event.action) {
                     MotionEvent.ACTION_DOWN -> {
                         // Start recording using the existing function
-                        voiceMessageRecorderView?.callback?.onVoiceRecordingStarted()
+//                        voiceMessageRecorderView?.callback?.onVoiceRecordingStarted()
+                        // Stop any existing receiver service immediately
+                        val stopIntent = Intent(fragment.requireContext(), PttReceiverService::class.java).apply {
+                            putExtra("roomId", roomId)
+                        }
+                        fragment.requireContext().stopService(stopIntent)
+                        
+                        // ✅ Use coordinated PTT to fix audio timing
+                        CoroutineScope(Dispatchers.IO).launch {
+                            try {
+                                pttManager.startStreamingCoordinated(roomId)
+                            } catch (e: Exception) {
+                                Timber.e(e, "❌ Failed to start coordinated PTT")
+                            }
+                        }
                         waveAnimation.visibility = View.VISIBLE
                         waveAnimation.playAnimation()
                         true
@@ -79,7 +120,18 @@ class StartCallActionsHandler(
 
                     MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                         // Stop recording and send the voice message using the existing function
-                        voiceMessageRecorderView?.callback?.onVoiceRecordingEnded()
+//                        voiceMessageRecorderView?.callback?.onVoiceRecordingEnded()
+                        // ✅ Use coordinated PTT stop
+                        CoroutineScope(Dispatchers.IO).launch {
+                            try {
+                                pttManager.stopStreamingCoordinated(roomId)
+                            } catch (e: Exception) {
+                                Timber.e(e, "❌ Failed to stop coordinated PTT")
+                                // Fallback to old method
+                                pttManager.stopStreaming()
+                        sendPttStatus("idle")
+                            }
+                        }
                         waveAnimation.pauseAnimation()
                         waveAnimation.visibility = View.GONE
                         true

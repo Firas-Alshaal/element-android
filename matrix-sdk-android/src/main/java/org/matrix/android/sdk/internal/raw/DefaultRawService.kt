@@ -31,7 +31,7 @@ internal class DefaultRawService @Inject constructor(
 
     override suspend fun getWellknown(domain: String): String {
         return getUrl(
-                "https://$domain/.well-known/matrix/client",
+                "http://$domain:8008/.well-known/matrix/client",
                 CacheStrategy.TtlCache(TimeUnit.HOURS.toMillis(8), false)
         )
     }

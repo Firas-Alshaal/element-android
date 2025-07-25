@@ -75,11 +75,11 @@
             android:id="@+id/timelineRecyclerView"
             android:layout_width="0dp"
             android:layout_height="0dp"
-            android:overScrollMode="always"
-            app:layout_constraintBottom_toTopOf="@id/failedMessagesWarningStub"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@id/removeJitsiWidgetView"
+            app:layout_constraintBottom_toTopOf="@id/pttAndComposerContainer"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            android:overScrollMode="always"
             tools:listitem="@layout/item_timeline_event_base" />
 
         <com.google.android.material.chip.Chip
@@ -160,6 +160,56 @@
             android:layout_height="match_parent"
             android:background="?vctr_chat_effect_snow_background"
             android:visibility="invisible" />
+
+        <LinearLayout
+            android:id="@+id/pttAndComposerContainer"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@android:color/transparent"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent">
+
+            <!-- PTT Button -->
+            <FrameLayout
+                android:id="@+id/record_btn_wrapper"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center">
+
+                <!-- Wave animation -->
+                <com.airbnb.lottie.LottieAnimationView
+                    android:id="@+id/wave_animation_original"
+                    android:layout_width="200dp"
+                    android:layout_height="200dp"
+                    android:layout_gravity="center"
+                    app:lottie_autoPlay="false"
+                    app:lottie_rawRes="@raw/wave_animation"
+                    app:lottie_loop="true" />
+
+                <!-- PTT button -->
+                <Button
+                    android:id="@+id/btn_record_original"
+                    android:layout_width="120dp"
+                    android:layout_height="120dp"
+                    android:text="Hold"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
+                    android:insetLeft="0dp"
+                    android:insetRight="0dp"
+                    app:iconGravity="textStart"
+                    android:backgroundTint="@color/key_share_req_accent_color"
+                    android:textSize="16sp"
+                    android:layout_gravity="center"
+                    app:cornerRadius="100dp"
+                    android:gravity="center" />
+            </FrameLayout>
+
+            <!-- Composer bar -->
+
+        </LinearLayout>
+
 
         <!-- Room not found layout -->
         <androidx.constraintlayout.widget.ConstraintLayout

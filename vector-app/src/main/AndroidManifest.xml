@@ -5,7 +5,6 @@
     <application
         android:name="im.vector.app.VectorApplication"
         android:allowBackup="false"
-        android:usesCleartextTraffic="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
         android:hasFragileUserData="true"
@@ -18,6 +17,7 @@
         android:supportsRtl="true"
         android:taskAffinity="${applicationId}.${appTaskAffinitySuffix}"
         android:theme="@style/Theme.Vector.Light"
+        android:usesCleartextTraffic="true"
         tools:ignore="UnusedAttribute"
         tools:replace="android:allowBackup">
 
@@ -82,11 +82,22 @@
 
         <service
             android:name="im.vector.app.push.fcm.AudioPlaybackService"
-            android:foregroundServiceType="mediaPlayback"
-            android:exported="false"/>
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
 
-        <receiver android:name="im.vector.app.push.fcm.NotificationDismissReceiver"
+<!--        <service-->
+<!--            android:name="im.vector.app.features.home.room.detail.composer.UdpWakeListenerService"-->
+<!--            android:exported="false"-->
+<!--            android:foregroundServiceType="connectedDevice" />-->
+
+        <receiver
+            android:name="im.vector.app.push.fcm.NotificationDismissReceiver"
             android:exported="false" />
+
+        <service
+            android:name="im.vector.app.features.home.room.detail.composer.PttReceiverService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
 
     </application>
 

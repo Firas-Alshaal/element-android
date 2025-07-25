@@ -5,7 +5,24 @@
     android:layout_height="wrap_content"
     android:orientation="vertical"
     android:gravity="center"
-    android:background="@android:color/transparent">
+    android:background="@android:color/transparent"
+    android:padding="16dp">
+
+    <!-- ✅ POLICE RADIO PROTOCOL: Channel Status Indicator -->
+    <TextView
+        android:id="@+id/channel_status"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="16dp"
+        android:text="🟢 Channel Clear"
+        android:textSize="14sp"
+        android:textStyle="bold"
+        android:textColor="@android:color/white"
+        android:background="@drawable/bg_rounded_button"
+        android:backgroundTint="#404040"
+        android:paddingHorizontal="12dp"
+        android:paddingVertical="6dp"
+        android:gravity="center" />
 
     <FrameLayout
         android:id="@+id/record_btn_wrapper"
@@ -25,7 +42,6 @@
         <!-- Push-to-talk button -->
         <Button
             android:id="@+id/btn_record"
-
             android:layout_width="120dp"
             android:layout_height="120dp"
             android:text="Hold"
@@ -40,4 +56,16 @@
             app:cornerRadius="100dp"
             android:gravity="center" />
     </FrameLayout>
+
+    <!-- ✅ Instructions text -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:text="Press and hold to talk\nRelease to end transmission"
+        android:textSize="12sp"
+        android:textColor="@android:color/white"
+        android:gravity="center"
+        android:alpha="0.8" />
+
 </LinearLayout>

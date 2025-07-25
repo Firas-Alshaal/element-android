@@ -7,6 +7,7 @@
 
 package im.vector.app.features.home.room.list
 
+import android.content.Context
 import org.matrix.android.sdk.api.session.room.model.RoomSummary
 import org.matrix.android.sdk.api.session.room.model.SpaceChildInfo
 
@@ -17,4 +18,8 @@ interface RoomListListener {
     fun onAcceptRoomInvitation(room: RoomSummary)
     fun onJoinSuggestedRoom(room: SpaceChildInfo)
     fun onSuggestedRoomClicked(room: SpaceChildInfo)
+    fun onStartPtt(roomId: String)
+    fun onStopPtt(roomId: String)
+    fun requestVoicePermission(context: Context, callback: (Boolean) -> Unit)
+    fun checkPttPermissionAndStart(roomId: String, callback: (Boolean) -> Unit)
 }

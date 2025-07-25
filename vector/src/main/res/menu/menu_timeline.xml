@@ -27,7 +27,7 @@
         android:title="@string/option_send_voice"
         android:visible="false"
         app:iconTint="?colorPrimary"
-        app:showAsAction="always"
+        app:showAsAction="never"
         tools:visible="true" />
 
     <!-- We always want to show this item as an icon -->

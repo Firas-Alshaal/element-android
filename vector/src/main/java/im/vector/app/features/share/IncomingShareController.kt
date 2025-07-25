@@ -52,6 +52,7 @@ class IncomingShareController @Inject constructor(
                                 data.selectedRoomIds,
                                 RoomListDisplayMode.FILTERED,
                                 singleLineLastEvent = false,
+                                listener = null,
                                 callback?.let { it::onRoomClicked },
                                 callback?.let { it::onRoomLongClicked }
                         )

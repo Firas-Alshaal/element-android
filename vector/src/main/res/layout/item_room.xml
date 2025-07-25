@@ -138,12 +138,11 @@
         android:layout_width="16dp"
         android:layout_height="16dp"
         android:layout_marginStart="4dp"
-        android:layout_marginEnd="4dp"
         android:contentDescription="@string/a11y_unsent_draft"
         android:src="@drawable/ic_edit"
         android:visibility="gone"
         app:layout_constraintBottom_toBottomOf="@id/roomNameView"
-        app:layout_constraintEnd_toStartOf="@id/roomUnreadCounterBadgeView"
+        app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toEndOf="@id/roomNameView"
         app:layout_constraintTop_toTopOf="@id/roomNameView"
         app:tint="?vctr_content_primary"
@@ -178,7 +177,8 @@
         android:layout_marginEnd="8dp"
         android:textColor="?vctr_content_secondary"
         app:layout_constraintBottom_toBottomOf="@id/roomNameView"
-        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintEnd_toEndOf="@id/pttRoomButton"
+        app:layout_constraintEnd_toStartOf="@id/pttRoomButton"
         app:layout_constraintTop_toTopOf="@id/roomNameView"
         tools:text="@tools:sample/date/hhmm" />
 
@@ -193,7 +193,7 @@
         android:lines="2"
         android:textAlignment="viewStart"
         android:textColor="?vctr_content_secondary"
-        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintEnd_toStartOf="@id/pttRoomButton"
         app:layout_constraintStart_toStartOf="@id/roomNameView"
         app:layout_constraintTop_toBottomOf="@id/roomNameView"
         tools:text="@sample/messages.json/data/message" />
@@ -242,5 +242,42 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/roomBottomBarrier" />
+
+    <FrameLayout
+        android:id="@+id/pttRoomButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:layout_marginEnd="8dp"
+        app:layout_constraintBottom_toBottomOf="@id/subtitleView"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <!-- Optional wave animation (can be hidden) -->
+        <com.airbnb.lottie.LottieAnimationView
+            android:id="@+id/wave_animation_original_outside"
+            android:layout_width="76dp"
+            android:layout_height="88dp"
+            android:layout_gravity="center"
+            android:visibility="gone"
+            app:lottie_autoPlay="false"
+            app:lottie_loop="true"
+            app:lottie_rawRes="@raw/wave_animation" />
+
+        <!-- Circular PTT Button -->
+        <Button
+            android:id="@+id/btn_record_original_outside"
+            android:layout_width="56dp"
+            android:layout_height="68dp"
+            android:layout_gravity="center"
+            android:backgroundTint="@color/key_share_req_accent_color"
+            android:gravity="center"
+            android:importantForAccessibility="no"
+            android:text="Push To Talk"
+            android:textColor="@color/palette_white"
+            android:textSize="8sp"
+            app:cornerRadius="100dp" />
+    </FrameLayout>
+
 
 </androidx.constraintlayout.widget.ConstraintLayout>

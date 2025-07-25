@@ -57,7 +57,13 @@ class RoomSummaryItemFactory @Inject constructor(
                 createInvitationItem(roomSummary, changeMembershipState, listener)
             }
             else -> createRoomItem(
-                    roomSummary, selectedRoomIds, displayMode, singleLineLastEvent, listener?.let { it::onRoomClicked }, listener?.let { it::onRoomLongClicked }
+                    roomSummary,
+                    selectedRoomIds,
+                    displayMode,
+                    singleLineLastEvent,
+                    listener,
+                    listener?.let { it::onRoomClicked },
+                    listener?.let { it::onRoomLongClicked }
             )
         }
     }
@@ -117,8 +123,9 @@ class RoomSummaryItemFactory @Inject constructor(
             selectedRoomIds: Set<String>,
             displayMode: RoomListDisplayMode,
             singleLineLastEvent: Boolean,
+            listener: RoomListListener?,
             onClick: ((RoomSummary) -> Unit)?,
-            onLongClick: ((RoomSummary) -> Boolean)?,
+            onLongClick: ((RoomSummary) -> Boolean)?
     ): VectorEpoxyModel<*> {
         val subtitle = getSearchResultSubtitle(roomSummary)
         val unreadCount = roomSummary.notificationCount
@@ -141,8 +148,19 @@ class RoomSummaryItemFactory @Inject constructor(
             createCenteredRoomSummaryItem(roomSummary, displayMode, showSelected, unreadCount, onClick, onLongClick)
         } else {
             createRoomSummaryItem(
-                    roomSummary, displayMode, subtitle, latestEventTime, typingMessage,
-                    latestFormattedEvent, showHighlighted, showSelected, unreadCount, singleLineLastEvent, onClick, onLongClick
+                    roomSummary,
+                    displayMode,
+                    subtitle,
+                    latestEventTime,
+                    typingMessage,
+                    latestFormattedEvent,
+                    showHighlighted,
+                    showSelected,
+                    unreadCount,
+                    singleLineLastEvent,
+                    onClick,
+                    onLongClick,
+                    listener
             )
         }
     }
@@ -159,7 +177,8 @@ class RoomSummaryItemFactory @Inject constructor(
             unreadCount: Int,
             singleLineLastEvent: Boolean,
             onClick: ((RoomSummary) -> Unit)?,
-            onLongClick: ((RoomSummary) -> Boolean)?
+            onLongClick: ((RoomSummary) -> Boolean)?,
+            listener: RoomListListener?
     ) = RoomSummaryItem_()
             .id(roomSummary.roomId)
             .avatarRenderer(avatarRenderer)
@@ -183,6 +202,13 @@ class RoomSummaryItemFactory @Inject constructor(
             .useSingleLineForLastEvent(singleLineLastEvent)
             .itemLongClickListener { _ -> onLongClick?.invoke(roomSummary) ?: false }
             .itemClickListener { onClick?.invoke(roomSummary) }
+            .pttClickListener { action, roomId ->
+                when (action) {
+                    "ACTION_DOWN" -> listener?.onStartPtt(roomId)
+                    "ACTION_UP" -> listener?.onStopPtt(roomId)
+                }
+            }
+            .listener(listener)
 
     private fun createCenteredRoomSummaryItem(
             roomSummary: RoomSummary,

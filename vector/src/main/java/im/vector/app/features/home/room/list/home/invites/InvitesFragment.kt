@@ -7,6 +7,7 @@
 
 package im.vector.app.features.home.room.list.home.invites
 
+import android.content.Context
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -26,6 +27,7 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import org.matrix.android.sdk.api.session.room.model.RoomSummary
 import org.matrix.android.sdk.api.session.room.model.SpaceChildInfo
+import timber.log.Timber
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -43,6 +45,22 @@ class InvitesFragment : VectorBaseFragment<FragmentInvitesBinding>(), RoomListLi
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         analyticsScreenName = MobileScreen.ScreenName.Invites
+    }
+
+    override fun onStartPtt(roomId: String) {
+        // This method is called when PTT starts - you can add PTT manager logic here if needed
+        Timber.d("🎙️ Start PTT for room: $roomId")
+    }
+
+    override fun onStopPtt(roomId: String) {
+        // This method is called when PTT stops - you can add PTT manager logic here if needed
+        Timber.d("🛑 Stop PTT for room: $roomId")
+    }
+
+    override fun requestVoicePermission(context: Context, callback: (Boolean) -> Unit) {
+    }
+
+    override fun checkPttPermissionAndStart(roomId: String, callback: (Boolean) -> Unit) {
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {

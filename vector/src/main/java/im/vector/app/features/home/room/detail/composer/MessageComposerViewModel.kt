@@ -992,7 +992,7 @@ class MessageComposerViewModel @AssistedInject constructor(
                     val contentUri = Uri.fromFile(file)
                     viewModelScope.launch {
                         try {
-                            val uploadResponse = uploadVoiceFileToSynapse(session,contentUri, mimeType, fileName)
+                            val uploadResponse = uploadVoiceFileToSynapse(session, contentUri, mimeType, fileName)
                             val mxcUri = uploadResponse.contentUri
 
                             val content = mapOf(

@@ -7,9 +7,11 @@
 
 package im.vector.app.features.home.room.detail
 
+import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -18,12 +20,17 @@ import android.view.HapticFeedbackConstants
 import android.view.LayoutInflater
 import android.view.Menu
 import android.view.MenuItem
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.TextView
+import android.widget.Toast
 import androidx.activity.addCallback
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.StringRes
 import androidx.appcompat.view.menu.MenuBuilder
 import androidx.core.content.ContextCompat
@@ -49,6 +56,7 @@ import com.airbnb.epoxy.EpoxyVisibilityTracker
 import com.airbnb.epoxy.OnModelBuildFinishedListener
 import com.airbnb.epoxy.addGlidePreloader
 import com.airbnb.epoxy.glidePreloader
+import com.airbnb.lottie.LottieAnimationView
 import com.airbnb.mvrx.Fail
 import com.airbnb.mvrx.args
 import com.airbnb.mvrx.fragmentViewModel
@@ -126,6 +134,9 @@ import im.vector.app.features.home.room.detail.composer.CanSendStatus
 import im.vector.app.features.home.room.detail.composer.MessageComposerAction
 import im.vector.app.features.home.room.detail.composer.MessageComposerFragment
 import im.vector.app.features.home.room.detail.composer.MessageComposerViewModel
+import im.vector.app.features.home.room.detail.composer.PttManager
+import im.vector.app.features.home.room.detail.composer.PttMatrixSyncHandler
+import im.vector.app.features.home.room.detail.composer.PttReceiverService
 import im.vector.app.features.home.room.detail.composer.boolean
 import im.vector.app.features.home.room.detail.composer.voice.VoiceRecorderFragment
 import im.vector.app.features.home.room.detail.error.RoomNotFound
@@ -179,18 +190,24 @@ import im.vector.app.features.widgets.permissions.RoomWidgetPermissionBottomShee
 import im.vector.app.push.fcm.AudioPlaybackService
 import im.vector.lib.core.utils.timer.Clock
 import im.vector.lib.strings.CommonStrings
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.billcarsonfr.jsonviewer.JSonViewerDialog
+import org.matrix.android.sdk.api.query.QueryStateEventValue
+import org.matrix.android.sdk.api.query.QueryStringValue
 import org.matrix.android.sdk.api.session.Session
 import org.matrix.android.sdk.api.session.events.model.EventType
 import org.matrix.android.sdk.api.session.events.model.content.EncryptedEventContent
 import org.matrix.android.sdk.api.session.events.model.content.WithHeldCode
 import org.matrix.android.sdk.api.session.events.model.toModel
+import org.matrix.android.sdk.api.session.getRoom
+import org.matrix.android.sdk.api.session.room.Room
 import org.matrix.android.sdk.api.session.room.model.Membership
+import org.matrix.android.sdk.api.session.room.model.PowerLevelsContent
 import org.matrix.android.sdk.api.session.room.model.RoomSummary
 import org.matrix.android.sdk.api.session.room.model.message.MessageAudioContent
 import org.matrix.android.sdk.api.session.room.model.message.MessageBeaconInfoContent
@@ -287,8 +304,24 @@ class TimelineFragment :
 
     private val lazyLoadedViews = RoomDetailLazyLoadedViews()
 
+    private lateinit var pttManager: PttManager
+
+    private lateinit var permissionLauncher: ActivityResultLauncher<Array<String>>
+    private var permissionGrantedCallback: (() -> Unit)? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        permissionLauncher = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
+            val granted = permissions[Manifest.permission.RECORD_AUDIO] == true
+            if (granted) {
+                permissionGrantedCallback?.invoke()
+            } else {
+                Toast.makeText(requireContext(), "Microphone permission denied", Toast.LENGTH_SHORT).show()
+            }
+            permissionGrantedCallback = null
+        }
+        pttManager = PttManager(requireContext(), session)
         analyticsScreenName = MobileScreen.ScreenName.Room
         galleryOrCameraDialogHelper = galleryOrCameraDialogHelperFactory.create(this)
         setFragmentResultListener(MigrateRoomBottomSheet.REQUEST_KEY) { _, bundle ->
@@ -326,7 +359,8 @@ class TimelineFragment :
                 showDialogWithMessage = ::showDialogWithMessage,
                 onTapToReturnToCall = ::onTapToReturnToCall,
                 messageComposerViewModel = messageComposerViewModel,
-                myUserId = session.myUserId
+                myUserId = session.myUserId,
+                session = session
         )
         keyboardStateUtils = KeyboardStateUtils(requireActivity())
         lazyLoadedViews.bind(views)
@@ -340,6 +374,8 @@ class TimelineFragment :
         setupRemoveJitsiWidgetView()
         setupLiveLocationIndicator()
         setupBackPressHandling()
+        setupPttButton()
+
 
         views.includeRoomToolbar.roomToolbarContentView.debouncedClicks {
             navigator.openRoomProfile(requireActivity(), timelineArgs.roomId)
@@ -424,6 +460,11 @@ class TimelineFragment :
         }
     }
 
+    private fun requestVoicePermission(onGranted: () -> Unit) {
+        permissionGrantedCallback = onGranted
+        permissionLauncher.launch(arrayOf(Manifest.permission.RECORD_AUDIO))
+    }
+
     private fun setupBackPressHandling() {
         requireActivity().onBackPressedDispatcher.addCallback(viewLifecycleOwner) {
             withState(messageComposerViewModel) { state ->
@@ -436,6 +477,132 @@ class TimelineFragment :
                 }
             }
         }
+    }
+
+    @SuppressLint("InflateParams", "ClickableViewAccessibility")
+    private fun setupPttButton() {
+        val btnRecord = views.pttAndComposerContainer.findViewById<Button>(R.id.btn_record_original)
+        val waveAnimation = views.pttAndComposerContainer.findViewById<LottieAnimationView>(R.id.wave_animation_original)
+
+        btnRecord.setOnTouchListener { _, event ->
+            when (event.action) {
+                MotionEvent.ACTION_DOWN -> {
+
+                    if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+                        requestVoicePermission {
+                            Toast.makeText(requireContext(), "Microphone permission granted. Press and hold to talk.", Toast.LENGTH_SHORT).show()
+                        }
+                        return@setOnTouchListener false // لا تبدأ البث
+                    }
+
+//                    isPushToTalkDialogShowing = true
+//                    sendPttStatus("talking")
+//
+//                    pttManager.startStreaming(timelineArgs.roomId)
+//                    waveAnimation.visibility = View.VISIBLE
+//                    waveAnimation.playAnimation()
+
+                    lifecycleScope.launch {
+                        // ✅ POLICE RADIO PROTOCOL: Check if channel is busy
+                        val (isBusy, currentSpeaker) = PttMatrixSyncHandler.isChannelBusy(timelineArgs.roomId, session.myUserId)
+                        if (isBusy && currentSpeaker != null) {
+                            withContext(Dispatchers.Main) {
+                                Toast.makeText(requireContext(), "🚫 Channel busy - $currentSpeaker is speaking", Toast.LENGTH_SHORT).show()
+                            }
+                            Timber.w("🚫 POLICE RADIO: Channel busy - $currentSpeaker is speaking")
+                            return@launch
+                        }
+                        
+                        val room = session.getRoom(timelineArgs.roomId)
+                        val hasPermission = room?.let { hasPttPermission(it) } ?: false
+
+                        if (!hasPermission) {
+                            withContext(Dispatchers.Main) {
+                                Toast.makeText(requireContext(), "You don't have permission to send PTT in this room.", Toast.LENGTH_LONG).show()
+                            }
+                            Timber.w("⛔️ User doesn't have Synapse permission to send PTT")
+                            return@launch
+                        }
+
+                        isPushToTalkDialogShowing = true
+                        
+                        // Stop any existing receiver service immediately
+                        val stopIntent = Intent(requireContext(), PttReceiverService::class.java).apply {
+                            putExtra("roomId", timelineArgs.roomId)
+                        }
+                        requireContext().stopService(stopIntent)
+                        
+                        // ✅ COORDINATE PTT START: Matrix event first, then audio transmission
+                        try {
+                            pttManager.startStreamingCoordinated(timelineArgs.roomId)
+                        } catch (e: Exception) {
+                            Timber.e(e, "❌ Failed to start coordinated PTT")
+                            return@launch
+                        }
+
+                        withContext(Dispatchers.Main) {
+                            waveAnimation.visibility = View.VISIBLE
+                            waveAnimation.playAnimation()
+                        }
+                    }
+
+
+                    true
+                }
+
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    if (!isPushToTalkDialogShowing) return@setOnTouchListener false
+
+
+                    // ✅ COORDINATE PTT STOP: Use coordinated stop with floor release
+                    CoroutineScope(Dispatchers.IO).launch {
+                        try {
+                            pttManager.stopStreamingCoordinated(timelineArgs.roomId)
+                        } catch (e: Exception) {
+                            Timber.e(e, "❌ Failed to stop coordinated PTT")
+                            // Fallback to old method
+                    pttManager.stopStreaming()
+                            sendPttStatus("idle")
+                        }
+                    }
+                    waveAnimation.pauseAnimation()
+                    isPushToTalkDialogShowing = false
+                    waveAnimation.visibility = View.GONE
+                    true
+                }
+
+                else -> false
+            }
+        }
+    }
+
+    private fun sendPttStatus(status: String) {
+        val content = mapOf(
+                "status" to status,
+                "userId" to session.myUserId
+        )
+
+        val room = session.getRoom(timelineArgs.roomId) ?: return
+
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+
+                room.stateService().sendStateEvent("ptt.status", session.myUserId, content)
+            } catch (e: Exception) {
+                Timber.e(e, "❌ Failed to send ptt.status")
+            }
+        }
+    }
+
+    private suspend fun hasPttPermission(room: Room): Boolean {
+        val stateKey = QueryStringValue.Equals("", QueryStringValue.Case.SENSITIVE)
+        val powerLevelsEvent = room.stateService().getStateEvent("m.room.power_levels", stateKey)
+        val powerLevels = powerLevelsEvent?.content?.toModel<PowerLevelsContent>()
+
+        val userLevel = powerLevels?.users?.get(session.myUserId) ?: powerLevels?.usersDefault ?: 0
+        val requiredLevel = powerLevels?.events?.get("ptt.status") ?: powerLevels?.stateDefault ?: 50
+
+        return userLevel >= requiredLevel
     }
 
     private fun setupRemoveJitsiWidgetView() {
