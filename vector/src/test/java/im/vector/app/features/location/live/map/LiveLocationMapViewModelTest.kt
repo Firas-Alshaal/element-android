@@ -13,13 +13,16 @@ import im.vector.app.features.location.live.StopLiveLocationShareUseCase
 import im.vector.app.test.fakes.FakeLocationSharingServiceConnection
 import im.vector.app.test.fakes.FakeLocationTracker
 import im.vector.app.test.fakes.FakeSession
+import im.vector.app.test.fakes.FakeStringProvider
 import im.vector.app.test.test
+import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.unmockkAll
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import org.junit.After
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.matrix.android.sdk.api.util.MatrixItem
@@ -35,18 +38,31 @@ class LiveLocationMapViewModelTest {
 
     private val fakeSession = FakeSession()
     private val fakeGetListOfUserLiveLocationUseCase = mockk<GetListOfUserLiveLocationUseCase>()
+    private val fakeGetRoomMembersLocationUseCase = mockk<GetRoomMembersLocationUseCase>()
+    private val fakeSaveRoomMemberLocationUseCase = mockk<SaveRoomMemberLocationUseCase>()
     private val fakeLocationSharingServiceConnection = FakeLocationSharingServiceConnection()
     private val fakeStopLiveLocationShareUseCase = mockk<StopLiveLocationShareUseCase>()
     private val fakeLocationTracker = FakeLocationTracker()
+    private val fakeStringProvider = FakeStringProvider()
+
+    @Before
+    fun setUp() {
+        // Set default behaviors for new mock objects
+        every { fakeGetRoomMembersLocationUseCase.execute(any()) } returns flowOf(emptyList())
+        coEvery { fakeSaveRoomMemberLocationUseCase.execute(any(), any(), any(), any()) } returns kotlin.Result.success(Unit)
+    }
 
     private fun createViewModel(): LiveLocationMapViewModel {
         return LiveLocationMapViewModel(
                 LiveLocationMapViewState(args),
                 session = fakeSession,
                 getListOfUserLiveLocationUseCase = fakeGetListOfUserLiveLocationUseCase,
+                getRoomMembersLocationUseCase = fakeGetRoomMembersLocationUseCase,
+                saveRoomMemberLocationUseCase = fakeSaveRoomMemberLocationUseCase,
                 locationSharingServiceConnection = fakeLocationSharingServiceConnection.instance,
                 stopLiveLocationShareUseCase = fakeStopLiveLocationShareUseCase,
                 locationTracker = fakeLocationTracker.instance,
+                stringProvider = fakeStringProvider.instance,
         )
     }
 

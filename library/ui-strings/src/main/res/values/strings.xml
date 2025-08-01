@@ -3318,6 +3318,16 @@
     <!-- mostly used as a description when replying to a live location message -->
     <string name="live_location_description">Live location</string>
 
+    <!-- Room Settings Maps -->
+    <string name="room_settings_group_map_title">Group Location Map</string>
+    <string name="room_settings_group_map_subtitle">View locations of all group members on map</string>
+    <string name="offline_map_notice">Offline Local Network Map</string>
+    <string name="offline_map_description">This map works without internet using your local Matrix server</string>
+    <string name="location_permission_denied_title">Permission Required</string>
+    <string name="location_permission_denied_message">You need admin/moderator permissions to save location data in this room</string>
+    <string name="location_saved_successfully">Location saved successfully</string>
+    <string name="location_save_failed">Failed to save location</string>
+
     <string name="message_bubbles">Show Message bubbles</string>
 
     <string name="tooltip_attachment_photo">Open camera</string>

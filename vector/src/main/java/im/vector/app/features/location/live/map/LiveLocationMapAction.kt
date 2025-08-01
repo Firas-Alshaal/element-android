@@ -15,4 +15,5 @@ sealed class LiveLocationMapAction : VectorViewModelAction {
     object StopSharing : LiveLocationMapAction()
     object ShowMapLoadingError : LiveLocationMapAction()
     object ZoomToUserLocation : LiveLocationMapAction()
+    object SaveCurrentUserLocation : LiveLocationMapAction()
 }

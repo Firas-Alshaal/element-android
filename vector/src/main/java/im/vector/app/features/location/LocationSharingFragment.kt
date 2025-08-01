@@ -91,7 +91,7 @@ class LocationSharingFragment :
 
         viewLifecycleOwner.lifecycleScope.launch {
             views.mapView.initialize(
-                    url = urlMapProvider.getMapUrl(),
+                    url = urlMapProvider.getOfflineMapUrl(),
                     locationTargetChangeListener = this@LocationSharingFragment
             )
         }

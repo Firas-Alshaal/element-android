@@ -39,6 +39,7 @@ import im.vector.app.core.extensions.addChildFragment
 import im.vector.app.core.extensions.cleanup
 import im.vector.app.core.extensions.configureWith
 import im.vector.app.core.platform.VectorBaseFragment
+import im.vector.app.core.platform.showOptimizedSnackbar
 import im.vector.app.core.resources.DrawableProvider
 import im.vector.app.core.utils.DimensionConverter
 import im.vector.app.core.utils.PERMISSIONS_FOR_FOREGROUND_LOCATION_SHARING
@@ -112,6 +113,8 @@ class LiveLocationMapViewFragment :
                 is LiveLocationMapViewEvents.LiveLocationError -> displayErrorDialog(viewEvent.error)
                 is LiveLocationMapViewEvents.ZoomToUserLocation -> handleZoomToUserLocationEvent(viewEvent)
                 LiveLocationMapViewEvents.UserLocationNotAvailableError -> handleUserLocationNotAvailableError()
+                is LiveLocationMapViewEvents.Error -> handleErrorEvent(viewEvent.message)
+                LiveLocationMapViewEvents.LocationSaved -> handleLocationSavedEvent()
             }
         }
     }
@@ -124,6 +127,14 @@ class LiveLocationMapViewFragment :
         showUserLocationNotAvailableErrorDialog {
             // do nothing
         }
+    }
+
+    private fun handleErrorEvent(message: String) {
+        vectorBaseActivity.getCoordinatorLayout()?.showOptimizedSnackbar(message)
+    }
+
+    private fun handleLocationSavedEvent() {
+        vectorBaseActivity.getCoordinatorLayout()?.showOptimizedSnackbar(getString(CommonStrings.location_saved_successfully))
     }
 
     override fun onDestroyView() {
@@ -145,9 +156,14 @@ class LiveLocationMapViewFragment :
                 listenMapLoadingError(it)
             }
             lifecycleScope.launch {
-                mapboxMap.setStyle(urlMapProvider.getMapUrl()) { style ->
+                // استخدام الخريطة المحلية المحسنة بدلاً من MapTiler
+                mapboxMap.setStyle(urlMapProvider.getOfflineMapUrl()) { style ->
                     mapStyle = style
                     this@LiveLocationMapViewFragment.mapboxMap = WeakReference(mapboxMap)
+                    
+                    // Add some basic offline map features to make it look more realistic
+                    addOfflineMapFeatures(style, mapboxMap)
+                    
                     symbolManager = SymbolManager(mapFragment.view as MapView, mapboxMap, style).apply {
                         iconAllowOverlap = true
                         onSymbolClickListener = OnSymbolClickListener {
@@ -155,10 +171,35 @@ class LiveLocationMapViewFragment :
                             true
                         }.also { addClickListener(it) }
                     }
+                    mapboxMap.addOnCameraIdleListener {
+                        // Use current state from ViewModel for map updates
+                        withState(viewModel) { state ->
+                            updateMap(state.userLocations, state.lastKnownUserLocation)
+                        }
+                    }
                     // force refresh of the map using the last viewState
                     invalidate()
                 }
             }
+        }
+    }
+    
+    private fun addOfflineMapFeatures(@Suppress("UNUSED_PARAMETER") style: Style, mapboxMap: MapboxMap) {
+        try {
+            // Add a simple text overlay indicating this is an offline map
+            mapboxMap.uiSettings.apply {
+                setAttributionMargins(16, 0, 0, 16)
+                setLogoMargins(16, 0, 0, 80)
+            }
+            
+            // You could add more features here like:
+            // - Grid lines
+            // - Compass rose
+            // - Scale indicator
+            // - Basic geometric shapes representing areas
+            
+        } catch (e: Exception) {
+            Timber.d("Failed to add offline map features: ${e.message}")
         }
     }
 

@@ -192,6 +192,10 @@ class RoomSettingsFragment :
         viewModel.handle(RoomSettingsAction.SetRoomGuestAccess(toggled))
     }
 
+    override fun onGroupLocationMapClicked() {
+        navigator.openLiveLocationMap(requireContext(), roomProfileArgs.roomId)
+    }
+
     override fun onImageReady(uri: Uri?) {
         uri ?: return
         viewModel.handle(

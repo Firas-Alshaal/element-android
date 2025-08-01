@@ -71,6 +71,9 @@ object EventType {
     const val STATE_ROOM_ENCRYPTION = "m.room.encryption"
     const val STATE_ROOM_SERVER_ACL = "m.room.server_acl"
 
+    // Custom location events for group members
+    const val STATE_ROOM_MEMBER_LOCATION = "org.matrix.custom.member_location"
+
     // This type is for local purposes, it should never be processed by the server
     const val LOCAL_STATE_ROOM_THIRD_PARTY_INVITE = "local.room.third_party_invite"
 

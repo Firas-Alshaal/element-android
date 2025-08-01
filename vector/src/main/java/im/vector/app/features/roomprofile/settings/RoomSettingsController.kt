@@ -43,6 +43,7 @@ class RoomSettingsController @Inject constructor(
         fun onHistoryVisibilityClicked()
         fun onJoinRuleClicked()
         fun onToggleGuestAccess()
+        fun onGroupLocationMapClicked()
     }
 
     var callback: Callback? = null
@@ -118,6 +119,15 @@ class RoomSettingsController @Inject constructor(
                 divider = true,
                 editable = data.actionPermissions.canChangeJoinRule,
                 action = { if (data.actionPermissions.canChangeJoinRule) callback?.onJoinRuleClicked() }
+        )
+
+        buildProfileAction(
+                id = "groupLocationMap",
+                title = stringProvider.getString(CommonStrings.room_settings_group_map_title),
+                subtitle = stringProvider.getString(CommonStrings.room_settings_group_map_subtitle),
+                divider = true,
+                editable = true,
+                action = { callback?.onGroupLocationMapClicked() }
         )
 
         val isPublic = (data.newRoomJoinRules.newJoinRules ?: data.currentRoomJoinRules) == RoomJoinRules.PUBLIC

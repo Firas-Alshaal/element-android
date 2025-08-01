@@ -71,7 +71,7 @@ class LocationPreviewFragment :
         views.mapView.onCreate(savedInstanceState)
 
         viewLifecycleOwner.lifecycleScope.launch {
-            views.mapView.initialize(urlMapProvider.getMapUrl())
+            views.mapView.initialize(urlMapProvider.getOfflineMapUrl())
         }
 
         observeViewEvents()

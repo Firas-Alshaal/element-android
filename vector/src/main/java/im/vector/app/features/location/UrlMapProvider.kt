@@ -17,6 +17,7 @@ class UrlMapProvider @Inject constructor(
         private val session: Session,
         private val rawService: RawService,
         locationSharingConfig: LocationSharingConfig,
+        private val offlineMapProvider: OfflineMapProvider,
 ) {
     private val keyParam = "?key=${locationSharingConfig.mapTilerKey}"
 
@@ -30,6 +31,26 @@ class UrlMapProvider @Inject constructor(
                 ?.getBestMapTileServerConfig()
                 ?.mapStyleUrl
         return upstreamMapUrl ?: fallbackMapUrl
+    }
+
+    /**
+     * Returns offline map style for use without internet connection
+     */
+    fun getOfflineMapUrl(): String {
+        return try {
+            // Try the enhanced offline style first
+            val styleJson = offlineMapProvider.getOfflineMapStyleJson()
+            "data:application/json;charset=utf-8," + java.net.URLEncoder.encode(styleJson, "UTF-8")
+        } catch (e: Exception) {
+            // Fallback to simple style if enhanced fails
+            try {
+                val simpleStyleJson = offlineMapProvider.getSimpleOfflineMapStyleJson()
+                "data:application/json;charset=utf-8," + java.net.URLEncoder.encode(simpleStyleJson, "UTF-8")
+            } catch (fallbackException: Exception) {
+                // Ultimate fallback - direct JSON without encoding issues
+                "data:application/json;charset=utf-8," + """{"version":8,"name":"Basic Offline Map","sources":{},"layers":[{"id":"background","type":"background","paint":{"background-color":"#f0f8ff"}}]}"""
+            }
+        }
     }
 
     fun buildStaticMapUrl(

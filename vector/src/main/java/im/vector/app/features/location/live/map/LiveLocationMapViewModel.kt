@@ -14,23 +14,29 @@ import dagger.assisted.AssistedInject
 import im.vector.app.core.di.MavericksAssistedViewModelFactory
 import im.vector.app.core.di.hiltMavericksViewModelFactory
 import im.vector.app.core.platform.VectorViewModel
+import im.vector.app.core.resources.StringProvider
 import im.vector.app.features.location.LocationData
 import im.vector.app.features.location.LocationTracker
 import im.vector.app.features.location.live.StopLiveLocationShareUseCase
 import im.vector.app.features.location.live.tracking.LocationSharingServiceConnection
+import im.vector.lib.strings.CommonStrings
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import org.matrix.android.sdk.api.session.Session
 import org.matrix.android.sdk.api.session.room.location.UpdateLiveLocationShareResult
+import timber.log.Timber
 
 class LiveLocationMapViewModel @AssistedInject constructor(
         @Assisted private val initialState: LiveLocationMapViewState,
         private val session: Session,
         getListOfUserLiveLocationUseCase: GetListOfUserLiveLocationUseCase,
+        private val getRoomMembersLocationUseCase: GetRoomMembersLocationUseCase,
+        private val saveRoomMemberLocationUseCase: SaveRoomMemberLocationUseCase,
         private val locationSharingServiceConnection: LocationSharingServiceConnection,
         private val stopLiveLocationShareUseCase: StopLiveLocationShareUseCase,
         private val locationTracker: LocationTracker,
+        private val stringProvider: StringProvider,
 ) :
         VectorViewModel<LiveLocationMapViewState, LiveLocationMapAction, LiveLocationMapViewEvents>(initialState),
         LocationSharingServiceConnection.Callback,
@@ -44,8 +50,24 @@ class LiveLocationMapViewModel @AssistedInject constructor(
     companion object : MavericksViewModelFactory<LiveLocationMapViewModel, LiveLocationMapViewState> by hiltMavericksViewModelFactory()
 
     init {
+        // Get both live locations and stored member locations
         getListOfUserLiveLocationUseCase.execute(initialState.roomId)
-                .onEach { setState { copy(userLocations = it, showLocateUserButton = it.none { it.matrixItem.id == session.myUserId }) } }
+                .onEach { liveLocations ->
+                    getRoomMembersLocationUseCase.execute(initialState.roomId)
+                            .onEach { storedLocations ->
+                                // Combine live locations and stored locations
+                                // Live locations take priority over stored ones for the same user
+                                val liveUserIds = liveLocations.map { it.matrixItem.id }.toSet()
+                                val combinedLocations = liveLocations + storedLocations.filter { it.matrixItem.id !in liveUserIds }
+                                setState { 
+                                    copy(
+                                        userLocations = combinedLocations, 
+                                        showLocateUserButton = combinedLocations.none { it.matrixItem.id == session.myUserId }
+                                    ) 
+                                }
+                            }
+                            .launchIn(viewModelScope)
+                }
                 .launchIn(viewModelScope)
         locationSharingServiceConnection.bind(this)
         initLocationTracking()
@@ -72,6 +94,37 @@ class LiveLocationMapViewModel @AssistedInject constructor(
         if (zoomToUserLocation) {
             _viewEvents.post(LiveLocationMapViewEvents.ZoomToUserLocation(locationData))
         }
+
+        // Auto-save user location when first obtained
+        if (showLocateButton && state.lastKnownUserLocation == null) {
+            viewModelScope.launch {
+                try {
+                    val result = saveRoomMemberLocationUseCase.execute(
+                            roomId = initialState.roomId,
+                            userId = session.myUserId,
+                            locationData = locationData,
+                            description = "Auto-saved location"
+                    )
+                    if (result.isFailure) {
+                        val exception = result.exceptionOrNull()
+                        when (exception) {
+                            is SecurityException -> {
+                                Timber.w("Permission denied for location saving: ${exception.message}")
+                                // Don't show error to user for auto-save permission failure
+                            }
+                            else -> {
+                                Timber.w("Failed to auto-save location: $exception")
+                            }
+                        }
+                    } else {
+                        Timber.d("Location auto-saved successfully")
+                    }
+                } catch (exception: Exception) {
+                    Timber.e(exception, "Error during location auto-save")
+                    // Don't crash, just log the error
+                }
+            }
+        }
     }
 
     override fun onCleared() {
@@ -87,6 +140,7 @@ class LiveLocationMapViewModel @AssistedInject constructor(
             LiveLocationMapAction.StopSharing -> handleStopSharing()
             LiveLocationMapAction.ShowMapLoadingError -> handleShowMapLoadingError()
             LiveLocationMapAction.ZoomToUserLocation -> handleZoomToUserLocation()
+            LiveLocationMapAction.SaveCurrentUserLocation -> handleSaveCurrentUserLocation()
         }
     }
 
@@ -126,6 +180,37 @@ class LiveLocationMapViewModel @AssistedInject constructor(
                 locationTracker.start()
                 locationTracker.requestLastKnownLocation()
             }
+        }
+    }
+
+    private fun handleSaveCurrentUserLocation() = withState { state ->
+        val currentLocationData = state.lastKnownUserLocation
+        if (currentLocationData != null) {
+            viewModelScope.launch {
+                try {
+                    val result = saveRoomMemberLocationUseCase.execute(
+                            roomId = initialState.roomId,
+                            userId = session.myUserId,
+                            locationData = currentLocationData,
+                            description = "Manually saved location"
+                    )
+                    if (result.isFailure) {
+                        val exception = result.exceptionOrNull()
+                        if (exception is SecurityException) {
+                            _viewEvents.post(LiveLocationMapViewEvents.Error(stringProvider.getString(CommonStrings.location_permission_denied_message)))
+                        } else {
+                            _viewEvents.post(LiveLocationMapViewEvents.Error(stringProvider.getString(CommonStrings.location_save_failed) + ": ${exception?.message}"))
+                        }
+                    } else {
+                        _viewEvents.post(LiveLocationMapViewEvents.LocationSaved)
+                    }
+                } catch (exception: Exception) {
+                    Timber.e(exception, "Error saving current location")
+                    _viewEvents.post(LiveLocationMapViewEvents.Error(stringProvider.getString(CommonStrings.location_save_failed)))
+                }
+            }
+        } else {
+            _viewEvents.post(LiveLocationMapViewEvents.Error(stringProvider.getString(CommonStrings.location_save_failed) + ": No location available to save"))
         }
     }
 

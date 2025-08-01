@@ -14,4 +14,6 @@ sealed interface LiveLocationMapViewEvents : VectorViewEvents {
     data class LiveLocationError(val error: Throwable) : LiveLocationMapViewEvents
     data class ZoomToUserLocation(val userLocation: LocationData) : LiveLocationMapViewEvents
     object UserLocationNotAvailableError : LiveLocationMapViewEvents
+    data class Error(val message: String) : LiveLocationMapViewEvents
+    object LocationSaved : LiveLocationMapViewEvents
 }
