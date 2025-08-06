@@ -136,7 +136,7 @@ import im.vector.app.features.home.room.detail.composer.MessageComposerFragment
 import im.vector.app.features.home.room.detail.composer.MessageComposerViewModel
 import im.vector.app.features.home.room.detail.composer.PttManager
 import im.vector.app.features.home.room.detail.composer.PttMatrixSyncHandler
-import im.vector.app.features.home.room.detail.composer.PttReceiverService
+import im.vector.app.features.home.room.detail.composer.PttTcpReceiverService
 import im.vector.app.features.home.room.detail.composer.boolean
 import im.vector.app.features.home.room.detail.composer.voice.VoiceRecorderFragment
 import im.vector.app.features.home.room.detail.error.RoomNotFound
@@ -527,7 +527,7 @@ class TimelineFragment :
                         isPushToTalkDialogShowing = true
                         
                         // Stop any existing receiver service immediately
-                        val stopIntent = Intent(requireContext(), PttReceiverService::class.java).apply {
+                        val stopIntent = Intent(requireContext(), PttTcpReceiverService::class.java).apply {
                             putExtra("roomId", timelineArgs.roomId)
                         }
                         requireContext().stopService(stopIntent)
@@ -1175,6 +1175,8 @@ class TimelineFragment :
 
     override fun onResume() {
         super.onResume()
+        val intent = Intent(requireContext(), PttTcpReceiverService::class.java)
+        requireContext().startService(intent)
         itemVisibilityTracker.attach(views.timelineRecyclerView)
         notificationDrawerManager.setCurrentRoom(timelineArgs.roomId)
         notificationDrawerManager.setCurrentThread(timelineArgs.threadTimelineArgs?.rootThreadEventId)

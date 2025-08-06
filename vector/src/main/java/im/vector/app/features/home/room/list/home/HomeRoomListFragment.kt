@@ -38,7 +38,7 @@ import im.vector.app.core.utils.toast
 import im.vector.app.databinding.FragmentRoomListBinding
 import im.vector.app.features.analytics.plan.ViewRoom
 import im.vector.app.features.home.room.detail.composer.PttManager
-import im.vector.app.features.home.room.detail.composer.PttReceiverService
+import im.vector.app.features.home.room.detail.composer.PttTcpReceiverService
 import im.vector.app.features.home.room.list.RoomListAnimator
 import im.vector.app.features.home.room.list.RoomListListener
 import im.vector.app.features.home.room.list.actions.RoomListQuickActionsBottomSheet
@@ -88,8 +88,11 @@ class HomeRoomListFragment :
 
     private lateinit var stateRestorer: LayoutManagerStateRestorer
 
-    private val pttManager by lazy { PttManager(requireContext(), activeSessionHolder.getSafeActiveSession()) }
-
+    private val pttManager: PttManager? by lazy {
+        activeSessionHolder.getSafeActiveSession()?.let {
+            PttManager(requireContext(), it)
+        }
+    }
     @Inject lateinit var activeSessionHolder: ActiveSessionHolder
 
     private lateinit var permissionLauncher: ActivityResultLauncher<Array<String>>
@@ -113,7 +116,7 @@ class HomeRoomListFragment :
         
         try {
             // Stop any existing receiver service immediately
-            val stopIntent = Intent(requireContext(), PttReceiverService::class.java).apply {
+            val stopIntent = Intent(requireContext(), PttTcpReceiverService::class.java).apply {
                 putExtra("roomId", roomId)
             }
             requireContext().stopService(stopIntent)
@@ -125,7 +128,7 @@ class HomeRoomListFragment :
                 try {
                     // Wait for Matrix event to propagate
                     delay(500)
-                    pttManager.startStreaming(roomId)
+                    pttManager?.startStreamingCoordinated(roomId)
                 } catch (e: Exception) {
                     Timber.e(e, "❌ Failed to start PTT for room: $roomId")
                 }
@@ -141,7 +144,7 @@ class HomeRoomListFragment :
         val session = activeSessionHolder.getActiveSession()
         PttMatrixSyncHandler.releaseSpeakingFloor(roomId, session.myUserId)
         
-        pttManager.stopStreaming()
+        pttManager?.stopStreaming()
         sendPttStatus(roomId, "idle")
     }
 

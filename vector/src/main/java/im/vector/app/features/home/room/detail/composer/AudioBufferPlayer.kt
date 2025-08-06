@@ -5,6 +5,7 @@
  * Please see LICENSE files in the repository root for full details.
  */
 
+/*
 package im.vector.app.features.home.room.detail.composer
 
 import android.media.AudioFormat
@@ -53,3 +54,4 @@ class AudioBufferPlayer {
         })
     }
 }
+*/

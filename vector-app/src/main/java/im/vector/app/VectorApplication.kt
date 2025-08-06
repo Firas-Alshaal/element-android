@@ -7,7 +7,6 @@
 
 package im.vector.app
 
-import GlobalPttManager
 import android.app.Application
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -228,13 +227,24 @@ class VectorApplication :
         initMemoryLeakAnalysis()
 
 
+//        ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
+//            override fun onStart(owner: LifecycleOwner) {
+//                activeSessionHolder.getSafeActiveSession()?.let { session ->
+//                    GlobalPttManager(
+//                            context = this@VectorApplication,
+//                            session = session
+//                    ).startMonitoringRooms()
+//                }
+//            }
+//        })
+
         ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
             override fun onStart(owner: LifecycleOwner) {
                 activeSessionHolder.getSafeActiveSession()?.let { session ->
-                    GlobalPttManager(
+                    GlobalPttManagerHolder.ensureStarted(
                             context = this@VectorApplication,
                             session = session
-                    ).startMonitoringRooms()
+                    )
                 }
             }
         })

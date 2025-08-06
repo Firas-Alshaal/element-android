@@ -30,6 +30,7 @@ import im.vector.app.features.analytics.plan.ViewRoom
 import im.vector.app.features.home.HomeActivity
 import im.vector.app.features.home.ShortcutsHandler
 import im.vector.app.features.home.room.detail.RoomDetailActivity
+import im.vector.app.features.home.room.detail.composer.PttTcpReceiverService
 import im.vector.app.features.home.room.threads.ThreadsActivity
 import im.vector.app.features.location.live.map.LiveLocationMapViewActivity
 import im.vector.app.features.notifications.NotificationDrawerManager
@@ -137,6 +138,9 @@ class MainActivity : VectorBaseActivity<ActivityMainBinding>(), UnlockedActivity
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        val intent = Intent(this, PttTcpReceiverService::class.java)
+        startService(intent)
 
         shortcutsHandler.updateShortcutsWithPreviousIntent()
 

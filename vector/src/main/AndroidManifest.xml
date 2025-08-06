@@ -408,6 +408,11 @@
             android:permission="android.permission.FOREGROUND_SERVICE_MICROPHONE">
         </service>
 
+        <service
+            android:name=".features.home.room.detail.composer.PttTcpReceiverService"
+            android:enabled="true"
+            android:exported="false" />
+
         <!-- Receivers -->
 
         <receiver
