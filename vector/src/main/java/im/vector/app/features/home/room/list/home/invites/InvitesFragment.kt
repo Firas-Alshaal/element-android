@@ -57,6 +57,11 @@ class InvitesFragment : VectorBaseFragment<FragmentInvitesBinding>(), RoomListLi
         Timber.d("🛑 Stop PTT for room: $roomId")
     }
 
+    override fun onPttTimeout(roomId: String) {
+        // This method is called when PTT stops - you can add PTT manager logic here if needed
+        Timber.d("🛑 Timeout PTT for room: $roomId")
+    }
+
     override fun requestVoicePermission(context: Context, callback: (Boolean) -> Unit) {
     }
 

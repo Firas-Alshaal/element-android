@@ -86,13 +86,21 @@ class StartCallActionsHandler(
 
         (fragment as? TimelineFragment)?.isPushToTalkDialogShowing = true
 
-
         dialog.setOnShowListener {
             val btnRecord = dialogView.findViewById<View>(R.id.btn_record)
             val waveAnimation = dialogView.findViewById<LottieAnimationView>(R.id.wave_animation)
 
             // Get the VoiceMessageRecorderView to trigger existing recording functions
 //            val voiceMessageRecorderView = fragment.view?.findViewById<VoiceMessageRecorderView>(R.id.voiceMessageRecorderView)
+
+            // ✅ Set up timeout callback to stop wave animation
+            pttManager.setOnTimeoutCallback {
+                fragment.requireActivity().runOnUiThread {
+                    waveAnimation.pauseAnimation()
+                    waveAnimation.visibility = View.GONE
+                    Timber.d("⏰ Wave animation stopped due to 30-second timeout")
+                }
+            }
 
             btnRecord.setOnTouchListener { _, event ->
                 when (event.action) {
@@ -132,6 +140,8 @@ class StartCallActionsHandler(
                         sendPttStatus("idle")
                             }
                         }
+                        // ✅ Clear timeout callback when stopping normally
+                        pttManager.clearTimeoutCallback()
                         waveAnimation.pauseAnimation()
                         waveAnimation.visibility = View.GONE
                         true
@@ -144,6 +154,8 @@ class StartCallActionsHandler(
         dialog.setOnDismissListener {
             // Reset flag when dialog is closed
             (fragment as? TimelineFragment)?.isPushToTalkDialogShowing = false
+            // ✅ Clear timeout callback when dialog is dismissed
+            pttManager.clearTimeoutCallback()
         }
 
         dialog.show()

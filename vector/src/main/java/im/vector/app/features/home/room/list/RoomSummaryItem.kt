@@ -48,6 +48,28 @@ import timber.log.Timber
 @EpoxyModelClass
 abstract class RoomSummaryItem : VectorEpoxyModel<RoomSummaryItem.Holder>(R.layout.item_room) {
 
+    companion object {
+        // ✅ Static map to track active wave animations by room ID
+        private val activeWaveAnimations = mutableMapOf<String, LottieAnimationView>()
+        
+        fun stopWaveAnimationForRoom(roomId: String) {
+            activeWaveAnimations[roomId]?.let { waveAnimation ->
+                waveAnimation.pauseAnimation()
+                waveAnimation.visibility = View.GONE
+                activeWaveAnimations.remove(roomId)
+                Timber.d("⏰ Wave animation stopped due to 30-second timeout for room: $roomId")
+            }
+        }
+        
+        fun addWaveAnimation(roomId: String, waveAnimation: LottieAnimationView) {
+            activeWaveAnimations[roomId] = waveAnimation
+        }
+        
+        fun removeWaveAnimation(roomId: String) {
+            activeWaveAnimations.remove(roomId)
+        }
+    }
+
     @EpoxyAttribute
     lateinit var typingMessage: String
 
@@ -163,8 +185,11 @@ abstract class RoomSummaryItem : VectorEpoxyModel<RoomSummaryItem.Holder>(R.layo
                             if (visibility != View.VISIBLE) visibility = View.VISIBLE
                             if (!isAnimating) playAnimation()
                         }
+                        
+                        // ✅ Add wave animation to tracking map
+                        addWaveAnimation(matrixItem.id, waveAnimation)
                     }
-                    return@setOnTouchListener true // <-- ADD THIS LINE
+                    return@setOnTouchListener true
                 }
 
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
@@ -177,6 +202,8 @@ abstract class RoomSummaryItem : VectorEpoxyModel<RoomSummaryItem.Holder>(R.layo
                         if (isAnimating) pauseAnimation()
                         if (visibility != View.GONE) visibility = View.GONE
                     }
+                    // ✅ Remove wave animation from tracking map
+                    removeWaveAnimation(matrixItem.id)
                     true // Consume the touch event
                 }
 
@@ -219,6 +246,8 @@ abstract class RoomSummaryItem : VectorEpoxyModel<RoomSummaryItem.Holder>(R.layo
         holder.rootView.setOnClickListener(null)
         holder.rootView.setOnLongClickListener(null)
         avatarRenderer.clear(holder.avatarImageView)
+        // ✅ Remove wave animation from tracking when item is unbound
+        removeWaveAnimation(matrixItem.id)
         super.unbind(holder)
     }
 

@@ -117,6 +117,12 @@ class RoomListFragment :
         // Note: PTT status sending is handled in HomeRoomListFragment
     }
 
+    override fun onPttTimeout(roomId: String) {
+        // This method is called when PTT times out - handle timeout logic here
+        Timber.d("⏰ PTT timeout for room: $roomId")
+        // Note: PTT timeout handling is done in HomeRoomListFragment
+    }
+
     override fun requestVoicePermission(context: Context, callback: (Boolean) -> Unit) {
         permissionGrantedCallback = callback
         permissionLauncher.launch(arrayOf(Manifest.permission.RECORD_AUDIO))

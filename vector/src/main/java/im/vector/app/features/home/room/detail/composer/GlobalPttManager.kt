@@ -55,6 +55,13 @@ class GlobalPttManager(
 
                             val room = session.getRoom(roomId) ?: return@forEach // 🛡️ حماية من null
 
+                            // 🎯 تحديد أولوية الغرفة من topic
+//                            val roomSummary = room.roomSummary()
+//                            val roomTopic = roomSummary?.topic
+//                            val roomPriority = PttMatrixSyncHandler.extractRoomPriority(roomTopic)
+//                            PttMatrixSyncHandler.updateRoomPriority(roomId, roomPriority)
+//                            Timber.d("🎯 Room priority initialized: $roomId → $roomPriority (topic: '$roomTopic')")
+                            
                             val pttHandler = PttMatrixSyncHandler(
                                     context = context,
                                     session = session,

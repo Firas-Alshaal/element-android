@@ -532,6 +532,16 @@ class TimelineFragment :
                         }
                         requireContext().stopService(stopIntent)
                         
+                        // ✅ Set up timeout callback to stop wave animation
+                        pttManager.setOnTimeoutCallback {
+                            requireActivity().runOnUiThread {
+                                waveAnimation.pauseAnimation()
+                                waveAnimation.visibility = View.GONE
+                                isPushToTalkDialogShowing = false
+                                Timber.d("⏰ Wave animation stopped due to 30-second timeout in TimelineFragment")
+                            }
+                        }
+                        
                         // ✅ COORDINATE PTT START: Matrix event first, then audio transmission
                         try {
                             pttManager.startStreamingCoordinated(timelineArgs.roomId)
@@ -553,6 +563,8 @@ class TimelineFragment :
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                     if (!isPushToTalkDialogShowing) return@setOnTouchListener false
 
+                    // ✅ Clear timeout callback
+                    pttManager.clearTimeoutCallback()
 
                     // ✅ COORDINATE PTT STOP: Use coordinated stop with floor release
                     CoroutineScope(Dispatchers.IO).launch {
@@ -565,6 +577,8 @@ class TimelineFragment :
                             sendPttStatus("idle")
                         }
                     }
+                    // ✅ Clear timeout callback when stopping normally
+                    pttManager.clearTimeoutCallback()
                     waveAnimation.pauseAnimation()
                     isPushToTalkDialogShowing = false
                     waveAnimation.visibility = View.GONE

@@ -206,6 +206,11 @@ class RoomSummaryItemFactory @Inject constructor(
                 when (action) {
                     "ACTION_DOWN" -> listener?.onStartPtt(roomId)
                     "ACTION_UP" -> listener?.onStopPtt(roomId)
+                    "TIMEOUT" -> {
+                        // Handle timeout - stop wave animation
+                        RoomSummaryItem.stopWaveAnimationForRoom(roomId)
+                        listener?.onPttTimeout(roomId)
+                    }
                 }
             }
             .listener(listener)

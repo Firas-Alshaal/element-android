@@ -41,6 +41,7 @@ import im.vector.app.features.home.room.detail.composer.PttManager
 import im.vector.app.features.home.room.detail.composer.PttTcpReceiverService
 import im.vector.app.features.home.room.list.RoomListAnimator
 import im.vector.app.features.home.room.list.RoomListListener
+import im.vector.app.features.home.room.list.RoomSummaryItem
 import im.vector.app.features.home.room.list.actions.RoomListQuickActionsBottomSheet
 import im.vector.app.features.home.room.list.actions.RoomListQuickActionsSharedAction
 import im.vector.app.features.home.room.list.actions.RoomListQuickActionsSharedActionViewModel
@@ -179,29 +180,29 @@ class HomeRoomListFragment :
         }
     }
 
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+
+        permissionLauncher = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
+            val granted = permissions[Manifest.permission.RECORD_AUDIO] == true
+            permissionGrantedCallback?.invoke(granted)
+            permissionGrantedCallback = null
+        }
+    }
+
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         views.stateView.contentView = views.roomListView
         views.stateView.state = StateView.State.Loading
         setupObservers()
         setupRecyclerView()
-    }
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-
-//        permissionLauncher = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
-//            val granted = permissions[Manifest.permission.RECORD_AUDIO] == true
-//            if (granted) {
-//                permissionGrantedCallback?.invoke()
-//            }
-//            permissionGrantedCallback = null
-//        }
-
-        permissionLauncher = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
-            val granted = permissions[Manifest.permission.RECORD_AUDIO] == true
-            permissionGrantedCallback?.invoke(granted)
-            permissionGrantedCallback = null
+        
+        // ✅ Set up global timeout callback for wave animation
+        PttManager.setGlobalTimeoutCallback { roomId ->
+            requireActivity().runOnUiThread {
+                Timber.d("⏰ Global PTT timeout occurred for room: $roomId")
+                handlePttTimeout(roomId)
+            }
         }
     }
 
@@ -403,6 +404,9 @@ class HomeRoomListFragment :
 
         concatAdapter.unregisterAdapterDataObserver(firstItemObserver)
 
+        // ✅ Clear global timeout callback
+        PttManager.clearGlobalTimeoutCallback()
+        
         super.onDestroyView()
     }
 
@@ -427,6 +431,24 @@ class HomeRoomListFragment :
     override fun onJoinSuggestedRoom(room: SpaceChildInfo) = Unit
 
     override fun onSuggestedRoomClicked(room: SpaceChildInfo) = Unit
+
+    override fun onPttTimeout(roomId: String) {
+        Timber.d("⏰ PTT timeout for room: $roomId")
+        // ✅ POLICE RADIO PROTOCOL: Release speaking floor and send Matrix idle status
+        val session = activeSessionHolder.getActiveSession()
+        PttMatrixSyncHandler.releaseSpeakingFloor(roomId, session.myUserId)
+        
+        pttManager?.stopStreaming()
+        sendPttStatus(roomId, "idle")
+    }
+
+    private fun handlePttTimeout(roomId: String) {
+        Timber.d("⏰ Handling PTT timeout for room: $roomId")
+        // ✅ Stop wave animation using the static method
+        RoomSummaryItem.stopWaveAnimationForRoom(roomId)
+        // ✅ Also handle the timeout through the existing mechanism
+        onPttTimeout(roomId)
+    }
 
     // endregion
 }
