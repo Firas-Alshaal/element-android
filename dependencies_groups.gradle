@@ -56,6 +56,9 @@ ext.groups = [
                 regex: [
                 ],
                 group: [
+                        'org.apache.httpcomponents.core5',
+                        'net.spy',
+                        'org.ehcache.modules',
                         'app.cash.paparazzi',
                         'ch.qos.logback',
                         'com.adevinta.android',

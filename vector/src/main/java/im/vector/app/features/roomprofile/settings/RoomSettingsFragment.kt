@@ -40,6 +40,7 @@ import im.vector.app.features.roomprofile.settings.historyvisibility.RoomHistory
 import im.vector.app.features.roomprofile.settings.historyvisibility.RoomHistoryVisibilitySharedActionViewModel
 import im.vector.app.features.roomprofile.settings.joinrule.RoomJoinRuleActivity
 import im.vector.app.features.roomprofile.settings.joinrule.RoomJoinRuleSharedActionViewModel
+import im.vector.app.features.roomprofile.groupmap.GroupMapActivity
 import im.vector.lib.strings.CommonStrings
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
@@ -193,7 +194,7 @@ class RoomSettingsFragment :
     }
 
     override fun onGroupLocationMapClicked() {
-        navigator.openLiveLocationMap(requireContext(), roomProfileArgs.roomId)
+        startActivity(GroupMapActivity.getIntent(requireContext(), roomProfileArgs.roomId))
     }
 
     override fun onImageReady(uri: Uri?) {

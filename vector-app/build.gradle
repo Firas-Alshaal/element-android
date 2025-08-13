@@ -374,10 +374,27 @@ android {
     }
 
     packaging {
-        pickFirsts.add("META-INF/LICENSE.md")
-        pickFirsts.add("META-INF/LICENSE-notice.md")
-        pickFirsts.add("MANIFEST.MF")
+        resources {
+            // keep your existing rules
+            pickFirsts += [
+                    "META-INF/LICENSE.md",
+                    "META-INF/LICENSE-notice.md",
+                    "MANIFEST.MF"
+            ]
+
+            // fix the current error
+            excludes += [
+                    "META-INF/DEPENDENCIES",
+                    "META-INF/DEPENDENCIES.txt" // optional, but common too
+            ]
+        }
     }
+
+//    packaging {
+//        pickFirsts.add("META-INF/LICENSE.md")
+//        pickFirsts.add("META-INF/LICENSE-notice.md")
+//        pickFirsts.add("MANIFEST.MF")
+//    }
 }
 
 dependencies {
@@ -450,4 +467,14 @@ dependencies {
     androidTestImplementation "org.jetbrains.kotlin:kotlin-reflect:1.8.21"
     debugImplementation libs.androidx.fragmentTestingManifest
     debugImplementation 'com.squareup.leakcanary:leakcanary-android:2.10'
+
+
+    // ArcGIS Runtime for VTPK files
+    implementation 'com.esri.arcgisruntime:arcgis-android:100.15.6'
+
+    // ArcGIS dependencies
+//    implementation 'org.apache.httpcomponents.core5:httpcore5:5.0.4'
+//    implementation 'org.apache.httpcomponents.core5:httpcore5-h2:5.0.4'
+//    implementation 'net.spy:spymemcached:2.12.3'
+//    implementation 'org.ehcache.modules:ehcache-api:3.4.0'
 }

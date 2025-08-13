@@ -111,6 +111,9 @@ android {
         pickFirsts.add("META-INF/LICENSE.md")
         pickFirsts.add("META-INF/LICENSE-notice.md")
         pickFirsts.add("MANIFEST.MF")
+
+        excludes.add("META-INF/DEPENDENCIES")
+        excludes.add("META-INF/DEPENDENCIES.txt") // optional but common
     }
 }
 
@@ -345,4 +348,13 @@ dependencies {
     // retrofit
     implementation 'com.squareup.retrofit2:retrofit:2.9.0'
     implementation 'com.squareup.retrofit2:converter-gson:2.9.0'
+
+    // ArcGIS Runtime for VTPK files
+    implementation 'com.esri.arcgisruntime:arcgis-android:100.15.6'
+
+    // ArcGIS dependencies
+//    implementation 'org.apache.httpcomponents.core5:httpcore5:5.0.4'
+//    implementation 'org.apache.httpcomponents.core5:httpcore5-h2:5.0.4'
+//    implementation 'net.spy:spymemcached:2.12.3'
+//    implementation 'org.ehcache.modules:ehcache-api:3.4.0'
 }

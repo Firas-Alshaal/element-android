@@ -6,6 +6,7 @@ buildscript {
 
     repositories {
         // Do not use `google()`, it prevents Dependabot from working properly
+        maven { url "https://esri.jfrog.io/artifactory/arcgis" }
         maven {
             url 'https://maven.google.com'
         }
@@ -71,6 +72,10 @@ allprojects {
     apply plugin: "io.gitlab.arturbosch.detekt"
 
     repositories {
+        // ArcGIS repository
+        maven {
+            url "https://esri.jfrog.io/artifactory/arcgis"
+        }
         // Do not use `mavenCentral()`, it prevents Dependabot from working properly
         maven {
             url 'https://repo1.maven.org/maven2'

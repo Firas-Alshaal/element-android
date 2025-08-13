@@ -30,6 +30,7 @@ import com.airbnb.epoxy.Carousel
 import com.airbnb.epoxy.EpoxyAsyncUtil
 import com.airbnb.epoxy.EpoxyController
 import com.airbnb.mvrx.Mavericks
+import com.esri.arcgisruntime.ArcGISRuntimeEnvironment
 import com.facebook.stetho.Stetho
 import com.gabrielittner.threetenbp.LazyThreeTen
 import com.github.rubensousa.gravitysnaphelper.GravitySnapHelper
@@ -225,6 +226,9 @@ class VectorApplication :
         Mapbox.getInstance(this)
 
         initMemoryLeakAnalysis()
+
+        val license = "runtimelite,1000,rud2786256387,none,0JMFA0PL4PP0F5KHT246"
+        ArcGISRuntimeEnvironment.setLicense(license)
     }
 
     private fun configureEpoxy() {

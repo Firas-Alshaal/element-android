@@ -356,6 +356,8 @@
         <activity android:name=".features.settings.devices.v2.details.SessionDetailsActivity" />
         <activity android:name=".features.settings.devices.v2.rename.RenameSessionActivity" />
         <activity android:name=".features.roomprofile.polls.detail.ui.RoomPollDetailActivity" />
+        <activity android:name=".features.roomprofile.groupmap.GroupMapActivity" />
+
 
         <!-- Services -->
 

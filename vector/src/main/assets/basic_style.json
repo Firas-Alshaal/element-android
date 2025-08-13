@@ -1,0 +1,14 @@
+{
+  "version": 8,
+  "name": "Basic Offline Style",
+  "sources": {},
+  "layers": [
+    {
+      "id": "background",
+      "type": "background",
+      "paint": {
+        "background-color": "#e8f4f8"
+      }
+    }
+  ]
+}

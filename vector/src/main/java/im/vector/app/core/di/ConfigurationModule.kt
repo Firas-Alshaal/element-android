@@ -11,6 +11,7 @@ import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
+import javax.inject.Singleton
 import im.vector.app.BuildConfig
 import im.vector.app.config.Analytics
 import im.vector.app.config.Config
@@ -21,6 +22,8 @@ import im.vector.app.features.crypto.keysrequest.OutboundSessionKeySharingStrate
 import im.vector.app.features.home.room.detail.composer.voice.VoiceMessageConfig
 import im.vector.app.features.location.LocationSharingConfig
 import im.vector.app.features.raw.wellknown.CryptoConfig
+import im.vector.app.features.roomprofile.groupmap.VtpkMapProvider
+
 
 @InstallIn(SingletonComponent::class)
 @Module
@@ -70,4 +73,11 @@ object ConfigurationModule {
     fun providesVoipConfig() = VoipConfig(
             handleCallAssertedIdentityEvents = Config.HANDLE_CALL_ASSERTED_IDENTITY_EVENTS
     )
+
+    @Provides
+    @Singleton
+    fun providesVtpkMapProvider(context: android.content.Context): im.vector.app.features.roomprofile.groupmap.VtpkMapProvider {
+        return im.vector.app.features.roomprofile.groupmap.VtpkMapProvider(context)
+    }
+
 }
