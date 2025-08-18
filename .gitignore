@@ -33,3 +33,4 @@ Cargo.lock
 library/rustCrypto/matrix-rust-sdk-crypto.aar
 *.hprof
 *.apk
+/vector/src/main/assets/maps/
