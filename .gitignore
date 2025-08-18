@@ -34,3 +34,6 @@ library/rustCrypto/matrix-rust-sdk-crypto.aar
 *.hprof
 *.apk
 /vector/src/main/assets/maps/
+vector/src/main/assets/maps/*.tpkx
+vector/src/main/assets/maps/*.vtpk
+vector/src/main/assets/maps/*.mmpk
