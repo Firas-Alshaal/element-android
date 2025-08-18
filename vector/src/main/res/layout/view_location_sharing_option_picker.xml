@@ -6,6 +6,128 @@
     android:layout_height="wrap_content"
     tools:parentTag="androidx.constraintlayout.widget.ConstraintLayout">
 
+    <!-- Enhanced Map Controls Section -->
+    <LinearLayout
+        android:id="@+id/enhancedMapControls"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:background="@drawable/bg_enhanced_map_controls"
+        android:padding="12dp"
+        android:layout_marginBottom="16dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <!-- Map Type Selector -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:gravity="center">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="نوع الخريطة"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:textColor="#2196F3"
+                android:layout_marginBottom="10dp" />
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:background="@drawable/bg_map_type_selector_enhanced"
+                android:padding="8dp">
+
+                <ImageButton
+                    android:id="@+id/btnMapStandardEnhanced"
+                    android:layout_width="32dp"
+                    android:layout_height="32dp"
+                    android:background="@drawable/bg_map_type_button_enhanced"
+                    android:src="@drawable/ic_map_standard"
+                    android:contentDescription="خريطة قياسية"
+                    android:scaleType="centerInside"
+                    android:padding="6dp"
+                    android:layout_marginEnd="6dp" />
+
+                <ImageButton
+                    android:id="@+id/btnMapSatelliteEnhanced"
+                    android:layout_width="32dp"
+                    android:layout_height="32dp"
+                    android:background="@drawable/bg_map_type_button_enhanced"
+                    android:src="@drawable/ic_map_satellite"
+                    android:contentDescription="خريطة فضائية"
+                    android:scaleType="centerInside"
+                    android:padding="6dp"
+                    android:layout_marginEnd="6dp" />
+
+                <ImageButton
+                    android:id="@+id/btnMapNightEnhanced"
+                    android:layout_width="32dp"
+                    android:layout_height="32dp"
+                    android:background="@drawable/bg_map_type_button_enhanced"
+                    android:src="@drawable/ic_map_night"
+                    android:contentDescription="خريطة ليلية"
+                    android:scaleType="centerInside"
+                    android:padding="6dp" />
+
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Zoom Controls -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:gravity="center">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="التحكم في الزووم"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:textColor="#4CAF50"
+                android:layout_marginBottom="10dp" />
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="@drawable/bg_zoom_controls_enhanced"
+                android:padding="8dp">
+
+                <ImageButton
+                    android:id="@+id/btnZoomInEnhanced"
+                    android:layout_width="32dp"
+                    android:layout_height="32dp"
+                    android:background="@drawable/bg_zoom_button_enhanced"
+                    android:src="@drawable/ic_zoom_in"
+                    android:contentDescription="تكبير"
+                    android:scaleType="centerInside"
+                    android:padding="6dp"
+                    android:layout_marginBottom="6dp" />
+
+                <ImageButton
+                    android:id="@+id/btnZoomOutEnhanced"
+                    android:layout_width="32dp"
+                    android:layout_height="32dp"
+                    android:background="@drawable/bg_zoom_button_enhanced"
+                    android:src="@drawable/ic_zoom_out"
+                    android:contentDescription="تصغير"
+                    android:scaleType="centerInside"
+                    android:padding="6dp" />
+
+            </LinearLayout>
+        </LinearLayout>
+
+    </LinearLayout>
+
     <im.vector.app.features.location.option.LocationSharingOptionView
         android:id="@+id/locationSharingOptionPinned"
         android:layout_width="0dp"
@@ -13,7 +135,7 @@
         app:layout_constraintBottom_toTopOf="@id/locationSharingOptionUserCurrent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/enhancedMapControls"
         app:locShareIcon="@drawable/ic_attachment_location_white"
         app:locShareIconBackground="@drawable/circle"
         app:locShareIconBackgroundTint="?colorPrimary"

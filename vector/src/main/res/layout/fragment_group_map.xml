@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
@@ -12,7 +13,8 @@
         android:layout_height="match_parent"
         android:gravity="center"
         android:orientation="vertical"
-        android:visibility="gone">
+        android:visibility="gone"
+        android:background="@android:color/white">
 
         <ProgressBar
             android:layout_width="wrap_content"
@@ -23,7 +25,8 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="Loading map..."
-            android:textSize="16sp" />
+            android:textSize="16sp"
+            android:textColor="@android:color/black" />
 
     </LinearLayout>
 
@@ -34,7 +37,8 @@
         android:layout_height="match_parent"
         android:gravity="center"
         android:orientation="vertical"
-        android:visibility="gone">
+        android:visibility="gone"
+        android:background="@android:color/white">
 
         <ImageView
             android:layout_width="64dp"
@@ -50,7 +54,8 @@
             android:layout_marginHorizontal="32dp"
             android:gravity="center"
             android:text="Failed to load map"
-            android:textSize="16sp" />
+            android:textSize="16sp"
+            android:textColor="@android:color/black" />
 
     </LinearLayout>
 
@@ -61,4 +66,50 @@
         android:layout_height="match_parent"
         android:visibility="gone" />
 
+    <!-- Enhanced Map Control Panel (Top Right) - Style Toggle + Custom Zoom -->
+    <LinearLayout
+        android:id="@+id/mapControlPanel"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|end"
+        android:layout_margin="16dp"
+        android:orientation="vertical"
+        android:elevation="12dp">
+
+        <!-- Single Style Toggle Button -->
+        <ImageButton
+            android:id="@+id/btnMapStyleToggle"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:src="@drawable/ic_map_standard"
+            android:background="@drawable/bg_circular_button"
+            android:contentDescription="تبديل نمط الخريطة"
+            android:scaleType="centerInside"
+            android:padding="12dp"
+            android:layout_marginBottom="16dp" />
+
+        <!-- Zoom In Button -->
+        <ImageButton
+            android:id="@+id/zoomInButton"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:src="@drawable/ic_zoom_in"
+            android:background="@drawable/bg_circular_button"
+            android:contentDescription="تكبير"
+            android:scaleType="centerInside"
+            android:padding="12dp"
+            android:layout_marginBottom="8dp" />
+
+        <!-- Zoom Out Button -->
+        <ImageButton
+            android:id="@+id/zoomOutButton"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:src="@drawable/ic_zoom_out"
+            android:background="@drawable/bg_circular_button"
+            android:contentDescription="تصغير"
+            android:scaleType="centerInside"
+            android:padding="12dp" />
+
+    </LinearLayout>
 </FrameLayout>

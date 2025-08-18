@@ -27,28 +27,85 @@ class VtpkMapProvider @Inject constructor(
         private const val VTPK_ASSETS_DIR = "maps"
         private const val VTPK_INTERNAL_DIR = "vtpk_maps"
 
-//        private const val UAE_MAP_FILENAME =
-//                "OpenStreetMap_F9A0B63D-2DDB-47F1-B1CC-BCFCB403DC14.vtpk"
-//
-//        private const val NOVA_MAP_FILENAME =
-//                "Nova_9233B27F-012A-4847-8687-8BD434431EDF.vtpk"
-//
-        private const val UAE_MAP_FILENAME =
-                "Hybrid Reference Layer_A23420F5-F12E-46F0-B1FF-5AD75A8A9BA8.vtpk"
+        // Map style constants - updated to match actual available files
+        const val STYLE_STREETS = "streets"  // Will use HYBRID as fallback
+        const val STYLE_SATELLITE = "satellite"
+        const val STYLE_HYBRID = "hybrid"
+        const val STYLE_MMPK = "mmpk"  // Mobile Map Package - الحل الأمثل!
 
-//        private const val UAE_MAP_FILENAME =
-//                "World Imagery_4CCE3C45-1863-494E-B47E-EECE00365956.tpkx"
+        // VTPK file mappings for different styles - updated to match actual files
+        private val STYLE_TO_FILENAME = mapOf(
+                STYLE_STREETS to "Hybrid Reference Layer_30B0353F-0C0E-4524-A93F-2EFC6D2D3002.vtpk",
+                STYLE_SATELLITE to "World Imagery_6E8F1887-C3FE-4601-AF3B-C6322F7512F8.tpkx",
+                STYLE_HYBRID to "Hybrid Reference Layer_30B0353F-0C0E-4524-A93F-2EFC6D2D3002.vtpk",
+                STYLE_MMPK to "Map.mmpk",
+        )
     }
+
+    private var currentStyle = STYLE_HYBRID
 
     fun areVtpkFilesAvailable(): Boolean {
         val dir = File(context.filesDir, VTPK_INTERNAL_DIR)
-        return File(dir, UAE_MAP_FILENAME).exists() && File(dir, UAE_MAP_FILENAME).exists()
+        return STYLE_TO_FILENAME.values.all { filename ->
+            File(dir, filename).exists()
+        }
     }
 
-    fun getDefaultMapPath(): String? = getUaeMapPath()
+    fun getDefaultMapPath(): String? = getMapPathForStyle(currentStyle)
 
-    fun getUaeMapPath(): String? = getInternalPath(UAE_MAP_FILENAME)
-    fun getNovaMapPath(): String? = getInternalPath(UAE_MAP_FILENAME)
+    fun getUaeMapPath(): String? = getMapPathForStyle(STYLE_HYBRID)
+
+    // Add specific getter methods for each style
+    fun getStreetsMapPath(): String? = getMapPathForStyle(STYLE_STREETS)
+    fun getSatelliteMapPath(): String? = getMapPathForStyle(STYLE_SATELLITE)
+    fun getHybridMapPath(): String? = getMapPathForStyle(STYLE_HYBRID)
+    fun getHybridLabelsPath(): String? {
+        // أولاً جرب الـ VTPK الهجين (هو الأكثر احتمالاً لوجود تسميات)
+        val hybridPath = getMapPathForStyle(STYLE_HYBRID)
+        if (!hybridPath.isNullOrEmpty()) {
+            return hybridPath
+        }
+        
+        // إذا لم يوجد، جرب الـ streets
+        val streetsPath = getMapPathForStyle(STYLE_STREETS)
+        if (!streetsPath.isNullOrEmpty()) {
+            return streetsPath
+        }
+        
+        // كحل أخير، ارجع أي VTPK متاح
+        return STYLE_TO_FILENAME.values.find { filename ->
+            filename.endsWith(".vtpk") && getInternalPath(filename) != null
+        }?.let { getInternalPath(it) }
+    }
+    fun getMmpkMapPath(): String? = getMapPathForStyle(STYLE_MMPK) // Mobile Map Package
+
+    fun getMapPathForStyle(style: String): String? {
+        val filename = STYLE_TO_FILENAME[style] ?: return null
+        return getInternalPath(filename)
+    }
+
+    fun getAvailableStyles(): List<String> = STYLE_TO_FILENAME.keys.toList()
+
+    fun getCurrentStyle(): String = currentStyle
+
+    fun setCurrentStyle(style: String): Boolean {
+        return if (STYLE_TO_FILENAME.containsKey(style)) {
+            currentStyle = style
+            true
+        } else {
+            false
+        }
+    }
+
+    fun getStyleDisplayName(style: String): String {
+        return when (style) {
+            STYLE_STREETS -> "Streets"
+            STYLE_SATELLITE -> "Satellite"
+            STYLE_HYBRID -> "Hybrid"
+            STYLE_MMPK -> "Complete Map"  // خريطة متكاملة
+            else -> "Unknown"
+        }
+    }
 
     private fun getInternalPath(filename: String): String? {
         val dir = File(context.filesDir, VTPK_INTERNAL_DIR)
@@ -59,27 +116,51 @@ class VtpkMapProvider @Inject constructor(
     fun copyVtpkFilesFromAssets() {
         val am = context.assets
         val dir = File(context.filesDir, VTPK_INTERNAL_DIR).apply { mkdirs() }
-        copyAssetFile(am, UAE_MAP_FILENAME, dir)
-        copyAssetFile(am, UAE_MAP_FILENAME, dir)
-        Timber.d("VTPK files ensured in: ${dir.absolutePath}")
+        
+        var successCount = 0
+        var totalCount = STYLE_TO_FILENAME.size
+        
+        STYLE_TO_FILENAME.values.forEach { filename ->
+            if (copyAssetFile(am, filename, dir)) {
+                successCount++
+            }
+        }
+        
+        Timber.d("VTPK files copied: $successCount/$totalCount to: ${dir.absolutePath}")
+        
+        if (successCount == 0) {
+            Timber.e("No VTPK files were copied successfully!")
+        }
     }
 
-    private fun copyAssetFile(assetManager: AssetManager, filename: String, targetDir: File) {
+    private fun copyAssetFile(assetManager: AssetManager, filename: String, targetDir: File): Boolean {
         val targetFile = File(targetDir, filename)
         if (targetFile.exists()) {
             Timber.d("Exists: ${targetFile.absolutePath}")
-            return
+            return true
         }
+        
         try {
+            // Check if file exists in assets first
+            val assetPath = "$VTPK_ASSETS_DIR/$filename"
+            val assetList = assetManager.list(VTPK_ASSETS_DIR) ?: emptyArray()
+            
+            if (!assetList.contains(filename)) {
+                Timber.e("Asset file not found: $assetPath")
+                return false
+            }
+            
             // لاحظ استخدام مجلد الأصول "maps/"
-            assetManager.open("$VTPK_ASSETS_DIR/$filename").use { input ->
+            assetManager.open(assetPath).use { input ->
                 FileOutputStream(targetFile).use { output ->
                     input.copyTo(output)
                 }
             }
             Timber.d("Copied $filename -> ${targetFile.absolutePath}")
+            return true
         } catch (e: IOException) {
             Timber.e(e, "Failed to copy $filename from assets")
+            return false
         }
     }
 }

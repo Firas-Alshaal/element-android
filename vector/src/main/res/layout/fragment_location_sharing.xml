@@ -17,6 +17,97 @@
         app:showLocateButton="true"
         tools:background="#4F00" />
 
+    <!-- Map Control Panel - Top Right -->
+    <LinearLayout
+        android:id="@+id/mapControlPanel"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="20dp"
+        android:layout_marginEnd="20dp"
+        android:background="@drawable/bg_map_control_panel"
+        android:orientation="vertical"
+        android:padding="12dp"
+        android:elevation="12dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <!-- Map Type Selector -->
+        <LinearLayout
+            android:id="@+id/mapTypeSelector"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:background="@drawable/bg_map_type_selector"
+            android:padding="8dp"
+            android:layout_marginBottom="12dp">
+
+            <ImageButton
+                android:id="@+id/btnMapStandard"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:background="@drawable/bg_map_type_button"
+                android:src="@drawable/ic_map_standard"
+                android:contentDescription="خريطة قياسية"
+                android:scaleType="centerInside"
+                android:padding="8dp"
+                android:layout_marginEnd="6dp" />
+
+            <ImageButton
+                android:id="@+id/btnMapSatellite"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:background="@drawable/bg_map_type_button"
+                android:src="@drawable/ic_map_satellite"
+                android:contentDescription="خريطة فضائية"
+                android:scaleType="centerInside"
+                android:padding="8dp"
+                android:layout_marginEnd="6dp" />
+
+            <ImageButton
+                android:id="@+id/btnMapNight"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:background="@drawable/bg_map_type_button"
+                android:src="@drawable/ic_map_night"
+                android:contentDescription="خريطة ليلية"
+                android:scaleType="centerInside"
+                android:padding="8dp" />
+
+        </LinearLayout>
+
+        <!-- Zoom Controls -->
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@drawable/bg_zoom_controls"
+            android:padding="8dp">
+
+            <ImageButton
+                android:id="@+id/btnZoomIn"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:background="@drawable/bg_zoom_button"
+                android:src="@drawable/ic_zoom_in"
+                android:contentDescription="تكبير"
+                android:scaleType="centerInside"
+                android:padding="8dp"
+                android:layout_marginBottom="6dp" />
+
+            <ImageButton
+                android:id="@+id/btnZoomOut"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:background="@drawable/bg_zoom_button"
+                android:src="@drawable/ic_zoom_out"
+                android:contentDescription="تصغير"
+                android:scaleType="centerInside"
+                android:padding="8dp" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+
     <ImageView
         android:id="@+id/shareLocationPin"
         android:layout_width="wrap_content"
