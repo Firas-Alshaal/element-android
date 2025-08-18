@@ -131,7 +131,7 @@ class VtpkMapProvider @Inject constructor(
         if (successCount == 0) {
             Timber.e("No VTPK files were copied successfully!")
         }
-    }
+    }//
 
     private fun copyAssetFile(assetManager: AssetManager, filename: String, targetDir: File): Boolean {
         val targetFile = File(targetDir, filename)
