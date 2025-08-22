@@ -11,12 +11,19 @@ import android.content.Context
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
+import io.socket.engineio.parser.Base64
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.matrix.android.sdk.api.session.Session
 import org.matrix.android.sdk.api.session.getRoom
+import org.matrix.android.sdk.api.query.QueryStringValue
+import org.matrix.android.sdk.api.session.room.members.roomMemberQueryParams
+import org.matrix.android.sdk.api.session.room.model.Membership
 import timber.log.Timber
 import java.io.BufferedOutputStream
 import java.net.ServerSocket
@@ -27,34 +34,36 @@ class PttManager(
         private val session: Session,
 ) {
     private var tcpSender: PttTcpSender? = null
-    
+
+    private var matrixSender: MatrixPttSender? = null
+
     // Add callback for timeout notification
     private var onTimeoutCallback: (() -> Unit)? = null
-    
+
     companion object {
         // Global timeout callback for UI notifications
         private var globalTimeoutCallback: ((roomId: String) -> Unit)? = null
-        
+
         fun setGlobalTimeoutCallback(callback: (roomId: String) -> Unit) {
             globalTimeoutCallback = callback
         }
-        
+
         fun clearGlobalTimeoutCallback() {
             globalTimeoutCallback = null
         }
     }
-    
+
     fun setOnTimeoutCallback(callback: () -> Unit) {
         onTimeoutCallback = callback
     }
-    
+
     fun clearTimeoutCallback() {
         onTimeoutCallback = null
     }
 
     fun startStreamingCoordinated(roomId: String) {
 
-        if (tcpSender != null) {
+        if (tcpSender != null || matrixSender != null) {
             Timber.w("PTT already active; ignoring start.")
             return
         }
@@ -68,6 +77,14 @@ class PttManager(
 
         CoroutineScope(Dispatchers.IO).launch {
             try {
+
+                val localIp = getLocalIpAddress()
+                val remoteIp = PttMatrixSyncHandler(context, session, session.myUserId, roomId).getSenderIpForRoom()
+                Timber.d("🔍 Transport decision: localIp=$localIp, remoteIp=$remoteIp")
+                val transportType = HybridPttStrategy.determineTransport(localIp, remoteIp)
+                val isLocalHost = !remoteIp.isNullOrEmpty() && (remoteIp == "127.0.0.1" || remoteIp == localIp)
+                Timber.d("🎯 Transport type: $transportType (isLocalHost=$isLocalHost)")
+
                 // 🎯 1. تحديد أولوية الغرفة من topic
                 /*val roomSummary = room.roomSummary()
                 val roomTopic = roomSummary?.topic
@@ -92,7 +109,7 @@ class PttManager(
                 }*/
 
                 // 3. إدارة IP مركزية وذكية
-                val success = PttCoordinator.ensureIpAvailable(room, session.myUserId, getLocalIpAddress())
+                val success = PttCoordinator.ensureIpAvailable(room, session.myUserId, localIp)
                 if (!success) {
                     Timber.e("❌ Failed to ensure IP availability - aborting PTT")
                     return@launch
@@ -106,15 +123,37 @@ class PttManager(
                 }
 
                 // 3. بدء TCP Server بعد ضمان Matrix coordination
-                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                    tcpSender = PttTcpSender(
-                        context = context, 
-                        roomId = roomId, 
-                        onTimeoutCallback = onTimeoutCallback,
-                        globalTimeoutCallback = globalTimeoutCallback
-                    )
-                    tcpSender?.startServer()
-                    Timber.d("✅ PTT coordination completed successfully")
+                kotlinx.coroutines.withContext(Dispatchers.Main) {
+                    when (transportType) {
+                        PttTransportType.TCP -> {
+                            tcpSender = PttTcpSender(
+                                    context = context,
+                                    roomId = roomId,
+                                    onTimeoutCallback = onTimeoutCallback,
+                                    globalTimeoutCallback = globalTimeoutCallback,
+                                    onStopCallback = { tcpSender = null; clearTimeoutCallback() }
+                            )
+                            if (isLocalHost && !remoteIp.isNullOrEmpty()) {
+                                tcpSender?.startClient(remoteIp)
+                            } else {
+                                tcpSender?.startServer()
+                            }
+                        }
+
+                        PttTransportType.MATRIX -> {
+                            matrixSender = MatrixPttSender(
+                                    context = context,
+                                    session = session,
+                                    roomId = roomId,
+                                    onTimeoutCallback = onTimeoutCallback,
+                                    globalTimeoutCallback = globalTimeoutCallback
+                            )
+                            matrixSender?.startStreaming()
+                        }
+                    }
+
+                    Timber.d("✅ Hybrid PTT coordination completed successfully with $transportType")
+
                 }
             } catch (e: Exception) {
                 Timber.e(e, "💥 Critical error in PTT coordination")
@@ -130,6 +169,9 @@ class PttManager(
             Timber.w("⚠️ Room $roomId not found during stop - cleaning up locally")
             tcpSender?.stopSending()
             tcpSender = null
+
+            matrixSender?.stopStreaming()
+            matrixSender = null
             // ✅ Clear timeout callback when stopping
             clearTimeoutCallback()
             return
@@ -141,6 +183,9 @@ class PttManager(
                 tcpSender?.stopSending()
                 tcpSender = null
 
+                matrixSender?.stopStreaming()
+                matrixSender = null
+
                 // 2. إرسال إشارة الإيقاف مع ضمان الوصول
                 val success = PttCoordinator.sendPttStatus(room, session.myUserId, "idle")
                 if (success) {
@@ -148,7 +193,7 @@ class PttManager(
                 } else {
                     Timber.w("⚠️ PTT stopped locally but Matrix notification may have failed")
                 }
-                
+
                 // ✅ Clear timeout callback when stopping
                 clearTimeoutCallback()
             } catch (e: Exception) {
@@ -162,6 +207,9 @@ class PttManager(
     fun stopStreaming() {
         tcpSender?.stopSending()
         tcpSender = null
+
+        matrixSender?.stopStreaming()
+        matrixSender = null
         // ✅ Clear timeout callback when stopping
         clearTimeoutCallback()
     }
@@ -171,11 +219,147 @@ class PttManager(
     }
 }
 
-class PttTcpSender(
-        private val context: Context, 
+class MatrixPttSender(
+        private val context: Context,
+        private val session: Session,
         private val roomId: String,
         private val onTimeoutCallback: (() -> Unit)? = null,
         private val globalTimeoutCallback: ((roomId: String) -> Unit)? = null
+) {
+    private var isStreaming = false
+    private var audioRecord: AudioRecord? = null
+    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+
+    companion object {
+        const val SAMPLE_RATE = 16000 // مثل الكود الممتاز للتوافق
+        const val BUFFER_SIZE = 4096 // 🎯 توازن مثالي: يمنع الصدى ويضمن الوضوح والاستمرارية
+        const val MAX_RECORDING_TIME_MS = 30_000L
+        const val WARNING_TIME_SECONDS = 5
+        const val CHUNK_INTERVAL_MS = 30L // 🎯 توازن: سريع لكن يضمن استقرار البيانات
+    }
+
+    fun startStreaming() {
+        if (isStreaming) return
+        isStreaming = true
+
+        scope.launch {
+            val room = session.getRoom(roomId)
+            if (room == null) {
+                Timber.e("❌ Matrix room not found: $roomId")
+                return@launch
+            }
+
+            // 🎯 الحصول على جميع أعضاء الغرفة للإرسال المباشر
+            val roomMembers = room.membershipService().getRoomMembers(
+                org.matrix.android.sdk.api.session.room.members.roomMemberQueryParams {
+                    memberships = listOf(org.matrix.android.sdk.api.session.room.model.Membership.JOIN)
+                    excludeSelf = true
+                }
+            )
+            
+            if (roomMembers.isEmpty()) {
+                Timber.w("⚠️ No other members in room for PTT")
+                return@launch
+            }
+
+            audioRecord = AudioRecord(
+                    MediaRecorder.AudioSource.MIC,
+                    SAMPLE_RATE,
+                    AudioFormat.CHANNEL_IN_MONO,
+                    AudioFormat.ENCODING_PCM_16BIT,
+                    BUFFER_SIZE
+            )
+
+            if (audioRecord?.state != AudioRecord.STATE_INITIALIZED) {
+                Timber.e("❌ Failed to initialize AudioRecord for Matrix")
+                return@launch
+            }
+
+            val buffer = ByteArray(BUFFER_SIZE)
+            val startTime = System.currentTimeMillis()
+            var packetCount = 0
+
+            Timber.d("🎙️ Starting Matrix PTT streaming via to-device messages...")
+
+            audioRecord?.startRecording()
+
+            while (isStreaming && (System.currentTimeMillis() - startTime) < MAX_RECORDING_TIME_MS) {
+                val read = audioRecord?.read(buffer, 0, buffer.size) ?: 0
+                if (read > 0) {
+                    val chunk = buffer.copyOf(read)
+                    val base64 = Base64.encodeToString(chunk, Base64.NO_WRAP)
+                    try {
+                        // 🚀 إرسال مباشر للأجهزة بدون timeline pollution
+                        val targets = roomMembers.associate { member ->
+                            member.userId to listOf("*") // كل الأجهزة للمستخدم
+                        }
+                        
+                        session.toDeviceService().sendToDevice(
+                                eventType = "m.ptt.audio",
+                                targets = targets,
+                                content = mapOf(
+                                        "audio_data" to base64,
+                                        "room_id" to roomId,
+                                        "timestamp" to System.currentTimeMillis(),
+                                        "sample_rate" to SAMPLE_RATE,
+                                        "encoding" to "pcm_16bit",
+                                        "sender_id" to session.myUserId
+                                )
+                        )
+                        packetCount++
+                        if (packetCount <= 3 || packetCount % 20 == 0) {
+                            Timber.d("📤 Sent PTT to-device chunk #$packetCount (${read} bytes) to ${roomMembers.size} members")
+                        }
+                    } catch (e: Exception) {
+                        Timber.e(e, "❌ Failed to send PTT to-device chunk")
+                    }
+                }
+
+                delay(CHUNK_INTERVAL_MS)
+            }
+
+            Timber.d("🏁 Matrix PTT streaming ended: $packetCount chunks sent via to-device")
+
+            // Cleanup + Notify
+            stopStreaming()
+            kotlinx.coroutines.withContext(Dispatchers.Main) {
+                onTimeoutCallback?.invoke()
+                globalTimeoutCallback?.invoke(roomId)
+            }
+        }
+    }
+
+    fun stopStreaming() {
+        if (!isStreaming) return
+        isStreaming = false
+
+        audioRecord?.let {
+            try {
+                it.stop()
+            } catch (_: Exception) {
+            }
+            try {
+                it.release()
+            } catch (_: Exception) {
+            }
+        }
+        audioRecord = null
+
+        try {
+            scope.cancel()
+        } catch (_: Exception) {
+        }
+
+        Timber.d("🛑 MatrixPttSender stopped")
+    }
+}
+
+class PttTcpSender(
+        private val context: Context,
+        private val roomId: String,
+        private val onTimeoutCallback: (() -> Unit)? = null,
+        private val globalTimeoutCallback: ((roomId: String) -> Unit)? = null,
+        private val onStopCallback: (() -> Unit)? = null
 ) {
     private val serverPort: Int = 8008
     private var audioRecord: AudioRecord? = null
@@ -223,8 +407,8 @@ class PttTcpSender(
         // بدء التسجيل المحسن للوضوح
         scope.launch {
             try {
-                val sampleRate = 16000
-                val bufferSize = 2048 // ثابت ومجرب للوضوح
+                val sampleRate = 16000 // مثل الكود الممتاز للتوافق
+                val bufferSize = 4096 // 🎯 توازن مثالي: يمنع الصدى ويضمن الوضوح والاستمرارية
 
                 val buffer = ByteArray(bufferSize)
 
@@ -261,13 +445,13 @@ class PttTcpSender(
                             socket?.close()
                         } catch (_: Exception) {
                         }
-                        
+
                         // ✅ Notify UI about timeout
                         onTimeoutCallback?.invoke()
-                        
+
                         // ✅ Notify global timeout callback
                         globalTimeoutCallback?.invoke(roomId)
-                        
+
                         break
                     }
 
@@ -361,6 +545,73 @@ class PttTcpSender(
                 } catch (_: Exception) {
                 }
                 socket = null
+            }
+        }
+    }
+
+    fun startClient(remoteIp: String) {
+        isSending = true
+        scope.launch {
+            try {
+                val socket = Socket(remoteIp, serverPort)
+                val outputStream = BufferedOutputStream(socket.getOutputStream())
+
+                val sampleRate = 16000 // مثل الكود الممتاز للتوافق
+                val bufferSize = 4096 // 🎯 توازن مثالي: يمنع الصدى ويضمن الوضوح والاستمرارية
+                val buffer = ByteArray(bufferSize)
+
+                audioRecord = AudioRecord(
+                        MediaRecorder.AudioSource.MIC,
+                        sampleRate,
+                        AudioFormat.CHANNEL_IN_MONO,
+                        AudioFormat.ENCODING_PCM_16BIT,
+                        bufferSize
+                )
+
+                if (audioRecord?.state != AudioRecord.STATE_INITIALIZED) {
+                    Timber.e("❌ AudioRecord not initialized for client mode")
+                    return@launch
+                }
+
+                audioRecord?.startRecording()
+                val roomToken = "${roomId.hashCode()}:"
+                val startTime = System.currentTimeMillis()
+                var packetCount = 0
+
+                while (isSending && audioRecord?.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
+                    val read = audioRecord?.read(buffer, 0, buffer.size) ?: 0
+                    if (read > 0) {
+                        val tokenBytes = roomToken.toByteArray()
+                        val combinedData = ByteArray(tokenBytes.size + read)
+                        System.arraycopy(tokenBytes, 0, combinedData, 0, tokenBytes.size)
+                        System.arraycopy(buffer, 0, combinedData, tokenBytes.size, read)
+
+                        outputStream.write(combinedData)
+                        outputStream.flush()
+                        packetCount++
+
+                        if (packetCount % 5 == 0) {
+                            Timber.d("📤 Sent client packet #$packetCount")
+                        }
+                    }
+
+                    if (System.currentTimeMillis() - startTime >= MAX_RECORDING_TIME_SECONDS * 1000L) {
+                        Timber.d("⏰ Client recording timeout")
+                        break
+                    }
+                }
+
+                outputStream.close()
+                socket.close()
+            } catch (e: Exception) {
+                Timber.e(e, "❌ Error in client mode sending")
+            } finally {
+                stopSending()
+                withContext(Dispatchers.Main) {
+                    onTimeoutCallback?.invoke()
+                    globalTimeoutCallback?.invoke(roomId)
+                    onStopCallback?.invoke()
+                }
             }
         }
     }

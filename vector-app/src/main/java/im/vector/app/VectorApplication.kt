@@ -239,12 +239,20 @@ class VectorApplication :
 //        })
 
         ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
+            var hasStarted = false
+
             override fun onStart(owner: LifecycleOwner) {
-                activeSessionHolder.getSafeActiveSession()?.let { session ->
-                    GlobalPttManagerHolder.ensureStarted(
-                            context = this@VectorApplication,
-                            session = session
-                    )
+                if (!hasStarted) {
+                    activeSessionHolder.getSafeActiveSessionAsync { session ->
+                        if (session != null) {
+                            GlobalPttManagerHolder.ensureStarted(
+                                    context = this@VectorApplication,
+                                    session = session
+                            )
+                            hasStarted = true
+                            Timber.d("✅ GlobalPttManager started ONCE at app launch")
+                        }
+                    }
                 }
             }
         })

@@ -40,7 +40,7 @@ class SentrySyncDurationMetrics @Inject constructor() : SyncDurationMetricPlugin
      */
     override fun startSpan(operation: String, description: String) {
         if (Sentry.isEnabled()) {
-            val span = Sentry.getSpan() ?: throw IllegalStateException("measureSpan block must be called within measureMetric")
+            val span = transaction ?: throw IllegalStateException("measureSpan block must be called within measureMetric")
             val innerSpan = span.startChild(operation, description)
             spans.push(innerSpan)
             logTransaction("Sentry span started: operation=[$operation], description=[$description]")

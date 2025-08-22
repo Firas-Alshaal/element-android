@@ -24,15 +24,20 @@ class SentryDownloadDeviceKeysMetrics @Inject constructor() : DownloadDeviceKeys
     }
 
     override fun finishTransaction() {
-        transaction?.finish()
-        logTransaction("Sentry transaction finished")
+        if (Sentry.isEnabled()) {
+            transaction?.finish()
+            transaction = null
+            logTransaction("Sentry transaction finished")
+        }
     }
 
     override fun onError(throwable: Throwable) {
-        transaction?.apply {
-            this.throwable = throwable
-            this.status = SpanStatus.INTERNAL_ERROR
+        if (Sentry.isEnabled()) {
+            transaction?.apply {
+                this.throwable = throwable
+                this.status = SpanStatus.INTERNAL_ERROR
+            }
+            logTransaction("Sentry transaction encountered error ${throwable.message}")
         }
-        logTransaction("Sentry transaction encountered error ${throwable.message}")
     }
 }

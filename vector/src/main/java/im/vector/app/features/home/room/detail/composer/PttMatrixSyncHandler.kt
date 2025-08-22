@@ -59,7 +59,10 @@ class PttMatrixSyncHandler(
         
         // 📊 إحصائيات التجاوز الإداري
         private var adminOverrideCount = 0
-        
+
+        private var matrixReceiver: MatrixPttReceiver? = null
+
+
         /**
          * تعيين callback للإشعار عند قطع التسجيل بسبب الأولوية
          */
@@ -374,8 +377,19 @@ class PttMatrixSyncHandler(
 
                 // ✅ INSTANT START: Launch receiver service immediately with priority
                 scope.launch(Dispatchers.Main.immediate) {
-                    startReceiverService(speakerId)
-                }
+                    val remoteIp = getSenderIpForUser(speakerId)
+                    val localIp = PttCoordinator.getLocalIpAddress()
+
+                    val transportType = HybridPttStrategy.determineTransport(localIp, remoteIp)
+                    Timber.d("🎧 Receiver decision: $transportType for speaker $speakerId")
+
+                    if (transportType == PttTransportType.TCP) {
+                        startReceiverService(speakerId) // تستخدم TCP
+                    } else {
+                        // Matrix-based استقبال
+                        matrixReceiver = MatrixPttReceiver(context, session, roomId)
+                        matrixReceiver?.startListening()
+                    }                }
             }
             "idle" -> {
                 // ✅ POLICE RADIO PROTOCOL: Release floor only if this speaker currently has it
@@ -388,6 +402,8 @@ class PttMatrixSyncHandler(
                 } else {
                     Timber.d("🔕 Ignoring idle event from $speakerId (not current speaker: ${currentSpeakerInRoom[roomId]})")
                 }
+                matrixReceiver?.stop()
+                matrixReceiver = null
             }
             else -> {
                 Timber.d("⚠️ Unknown status: $status")

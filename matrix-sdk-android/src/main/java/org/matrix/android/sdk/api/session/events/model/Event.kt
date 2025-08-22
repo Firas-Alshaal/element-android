@@ -454,8 +454,12 @@ fun Event.getRelationContent(): RelationDefaultContent? {
     return if (isEncrypted()) {
         content.toModel<EncryptedEventContent>()?.relatesTo
     } else {
-        content.toModel<MessageContent>()?.relatesTo
-                ?: getClearContent()?.get("m.relates_to")?.toContent().toModel() // Special cases when there is only a local msgtype for some event types
+        // Only try to parse as MessageContent if it's actually a message event
+        if (EventType.MESSAGE == getClearType() || EventType.ENCRYPTED == getClearType()) {
+            content.toModel<MessageContent>()?.relatesTo
+        } else {
+            null
+        } ?: getClearContent()?.get("m.relates_to")?.toContent().toModel() // Special cases when there is only a local msgtype for some event types
     }
 }
 
