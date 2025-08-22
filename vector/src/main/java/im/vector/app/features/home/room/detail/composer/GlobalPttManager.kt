@@ -8,11 +8,8 @@ import im.vector.app.features.home.room.detail.composer.PttTcpReceiverService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import org.matrix.android.sdk.api.query.QueryStringValue
 import org.matrix.android.sdk.api.session.Session
 import org.matrix.android.sdk.api.session.getRoom
@@ -40,7 +37,6 @@ object GlobalPttManagerHolder {
             Handler(Looper.getMainLooper()).post {
                 manager?.startMonitoringRooms()
             }
-//            manager?.startMonitoringRooms()
         } else {
             Timber.d("✅ GlobalPttManager already running for user: ${session.myUserId}")
         }
@@ -72,13 +68,6 @@ class GlobalPttManager(
                         Timber.d("🏠 Setting up PTT monitoring for room: $roomId")
 
                         val room = session.getRoom(roomId) ?: return@forEach // 🛡️ حماية من null
-
-                        // 🎯 تحديد أولوية الغرفة من topic
-//                            val roomSummary = room.roomSummary()
-//                            val roomTopic = roomSummary?.topic
-//                            val roomPriority = PttMatrixSyncHandler.extractRoomPriority(roomTopic)
-//                            PttMatrixSyncHandler.updateRoomPriority(roomId, roomPriority)
-//                            Timber.d("🎯 Room priority initialized: $roomId → $roomPriority (topic: '$roomTopic')")
 
                         val pttHandler = PttMatrixSyncHandler(
                                 context = context,

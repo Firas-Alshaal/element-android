@@ -17,30 +17,25 @@ import android.media.AudioManager
 import android.media.AudioTrack
 import android.os.Build
 import android.os.IBinder
-import androidx.lifecycle.asFlow
 import io.socket.engineio.parser.Base64
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import org.matrix.android.sdk.api.query.QueryStringValue
 import org.matrix.android.sdk.api.session.Session
 import org.matrix.android.sdk.api.session.getRoom
-import org.matrix.android.sdk.api.session.LiveEventListener
-import org.matrix.android.sdk.api.util.JsonDict
 import timber.log.Timber
 import java.io.BufferedInputStream
 import java.net.Socket
 
 class PttTcpReceiverService : Service() {
 
-    private val serverPort = 8008 // Port المرسل الذي نتصل به
+    private val serverPort = 8008 // Sender port to connect to
     private val sampleRate = 16000
     private val channelConfig = AudioFormat.CHANNEL_OUT_MONO
     private val audioEncoding = AudioFormat.ENCODING_PCM_16BIT
-    private val audioBufferSize = 2048 // 🔥 ثابت ومجرب للوضوح - مثل الكود المحسن
+    private val audioBufferSize = 2048 // Proven optimal size for clear audio
 
     private var isRunning = false
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -53,11 +48,11 @@ class PttTcpReceiverService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         currentRoomId = intent?.getStringExtra("roomId")
         myUserId = intent?.getStringExtra("myUserId")
-        senderIp = intent?.getStringExtra("senderIp") // 🎯 يجب تمرير IP المرسل
+        senderIp = intent?.getStringExtra("senderIp") // Must pass sender IP
         currentSpeakerId = intent?.getStringExtra("speakerId")
 
         if (myUserId == null || currentRoomId == null || senderIp == null) {
-            Timber.w("⚠️ Missing parameters, stopping service")
+            Timber.w("Missing parameters, stopping service")
             stopSelf()
             return START_NOT_STICKY
         }
@@ -83,11 +78,11 @@ class PttTcpReceiverService : Service() {
                 }
 
                 try {
-                    // 🎵 Input stream محسن للوضوح
+                    // Optimized input stream for clarity
                     val input = BufferedInputStream(socket.getInputStream(), audioBufferSize)
-                    Timber.d("🎙️ Starting audio reception from $currentSpeakerId in room $currentRoomId")
+                    Timber.d("Starting audio reception from $currentSpeakerId in room $currentRoomId")
 
-                    // ✅ إعداد AudioTrack بسيط وفعال - مثل الكود المحسن
+                    // Simple and effective AudioTrack setup
                     val audioTrack = AudioTrack.Builder()
                             .setAudioAttributes(
                                     AudioAttributes.Builder()
@@ -102,7 +97,7 @@ class PttTcpReceiverService : Service() {
                                             .setChannelMask(channelConfig)
                                             .build()
                             )
-                            .setBufferSizeInBytes(2048) // 🔥 حجم ثابت ومجرب
+                            .setBufferSizeInBytes(2048) // Proven optimal size
                             .setTransferMode(AudioTrack.MODE_STREAM)
                             .build()
 
@@ -119,9 +114,9 @@ class PttTcpReceiverService : Service() {
                         }
                     }
 
-                    // ✅ تشغيل الصوت
+                    // Start audio playback
                     audioTrack.play()
-                    Timber.d("🎵 AudioTrack state: ${audioTrack.state}, playState: ${audioTrack.playState}")
+                    Timber.d("AudioTrack state: ${audioTrack.state}, playState: ${audioTrack.playState}")
 
                     val buffer = ByteArray(audioBufferSize)
                     val expectedToken = currentRoomId?.hashCode()?.toString() + ":"
@@ -131,23 +126,23 @@ class PttTcpReceiverService : Service() {
                     var validPackets = 0
                     var noDataCounter = 0
 
-                    Timber.d("🎧 Starting audio reception loop - waiting for data...")
+                    Timber.d("Starting audio reception loop - waiting for data...")
 
                     while (isRunning && !socket.isClosed) {
                         try {
                             val read = input.read(buffer)
-                            Timber.d("📊 Read attempt result: $read bytes")
+                            Timber.d("Read attempt result: $read bytes")
 
                             if (read > 0) {
                                 receivedPackets++
 
-                                // ✅ Token validation مبسط وسريع
+                                // Simple and fast token validation
                                 val tokenBytes = expectedToken.toByteArray()
                                 val tokenLength = tokenBytes.size
                                 var tokenMatches = true
 
                                 if (read >= tokenLength) {
-                                    // مقارنة البايتات مباشرة بدون تحويل إلى String
+                                    // Compare bytes directly without String conversion
                                     for (i in tokenBytes.indices) {
                                         if (buffer[i] != tokenBytes[i]) {
                                             tokenMatches = false
@@ -163,11 +158,11 @@ class PttTcpReceiverService : Service() {
                                     val audioDataLength = read - tokenLength
 
                                     if (validPackets <= 3) {
-                                        Timber.d("✅ Valid packet #$validPackets: $audioDataLength audio bytes")
+                                        Timber.d("Valid packet #$validPackets: $audioDataLength audio bytes")
                                     }
 
                                     if (audioDataLength > 0) {
-                                        // ✅ كتابة مبسطة مثل الكود المحسن مع partial write handling
+                                        // Simple write with partial write handling
                                         var offset = tokenLength
                                         var remaining = audioDataLength
 
@@ -179,42 +174,40 @@ class PttTcpReceiverService : Service() {
                                         }
                                     }
 
-                                    // log كل 10 packets صحيحة للمزيد من التفاصيل
+                                    // Log every 10 valid packets for details
                                     if (validPackets % 10 == 1 && validPackets > 3) {
-                                        Timber.d("🎧 Playing packet #$validPackets: $audioDataLength audio bytes")
+                                        Timber.d("Playing packet #$validPackets: $audioDataLength audio bytes")
                                     }
                                 } else {
-                                    // log أول 3 tokens خاطئة فقط
+                                    // Log only first 3 invalid tokens
                                     if (receivedPackets - validPackets <= 3) {
                                         val hexPreview = buffer.take(minOf(10, read)).joinToString("") { "%02x".format(it) }
-                                        Timber.w("❌ Invalid token in packet #$receivedPackets: $hexPreview...")
+                                        Timber.w("Invalid token in packet #$receivedPackets: $hexPreview...")
                                     }
                                 }
 
-
-
-                                if (validPackets <= 3) { // فقط أول 3 packets للتقليل من الـ logs
-                                    Timber.d("🔄 Continuing loop... receivedPackets=$receivedPackets, validPackets=$validPackets")
+                                if (validPackets <= 3) { // Only first 3 packets to reduce logs
+                                    Timber.d("Continuing loop... receivedPackets=$receivedPackets, validPackets=$validPackets")
                                 }
                             } else if (read == 0) {
                                 noDataCounter++
-                                Timber.d("📭 No data received (count: $noDataCounter)")
-                                if (noDataCounter > 30) { // 3 ثواني - timeout أسرع
-                                    Timber.w("⚠️ No data for too long - connection may be stale")
+                                Timber.d("No data received (count: $noDataCounter)")
+                                if (noDataCounter > 30) { // 3 seconds - faster timeout
+                                    Timber.w("No data for too long - connection may be stale")
                                     break
                                 }
-                                Thread.sleep(100) // انتظار قصير
+                                Thread.sleep(100) // Short wait
                             } else {
-                                Timber.w("❌ Connection closed by sender (read=$read)")
+                                Timber.w("Connection closed by sender (read=$read)")
                                 break
                             }
                         } catch (e: Exception) {
-                            Timber.e(e, "💥 Error during audio reception")
+                            Timber.e(e, "Error during audio reception")
                             break
                         }
                     }
 
-                    Timber.d("🏁 Audio session ended - total packets: $receivedPackets, valid: $validPackets")
+                    Timber.d("Audio session ended - total packets: $receivedPackets, valid: $validPackets")
 
                     audioTrack.stop()
                     audioTrack.release()
@@ -239,99 +232,11 @@ class PttTcpReceiverService : Service() {
         super.onDestroy()
         isRunning = false
         scope.cancel()
-        Timber.d("🛑 PttTcpReceiverService destroyed")
+        Timber.d("PttTcpReceiverService destroyed")
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
 }
-
-/*class MatrixPttReceiver(
-        private val context: Context,
-        private val session: Session,
-        private val roomId: String
-) {
-    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-    private var audioTrack: AudioTrack? = null
-    private var isRunning = false
-
-    fun startListening() {
-        if (isRunning) return
-        isRunning = true
-
-        val room = session.getRoom(roomId) ?: return
-        Timber.d("🎧 Starting MatrixPttReceiver for room: $roomId")
-
-        val flow = room.stateService().getStateEventsLive(
-                eventTypes = setOf("im.ptt.chunk"),
-                stateKey = QueryStringValue.IsNotEmpty
-        ).asFlow()
-
-        flow.onEach { events ->
-            if (!isRunning) return@onEach
-
-            events.sortedBy { it.originServerTs ?: 0L }.forEach { event ->
-                try {
-                    val content = event.content ?: return@forEach
-                    val dataBase64 = content["data"] as? String ?: return@forEach
-                    val pcmData = Base64.decode(dataBase64, Base64.NO_WRAP)
-
-                    playPcmData(pcmData)
-                } catch (e: Exception) {
-                    Timber.e(e, "❌ Failed to process Matrix chunk")
-                }
-            }
-        }.launchIn(scope)
-    }
-
-    private fun playPcmData(data: ByteArray) {
-        if (audioTrack == null) {
-            val sampleRate = 16000
-            val bufferSize = AudioTrack.getMinBufferSize(
-                    sampleRate,
-                    AudioFormat.CHANNEL_OUT_MONO,
-                    AudioFormat.ENCODING_PCM_16BIT
-            )
-
-            audioTrack = AudioTrack.Builder()
-                    .setAudioAttributes(
-                            AudioAttributes.Builder()
-                                    .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
-                                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-                                    .build()
-                    )
-                    .setAudioFormat(
-                            AudioFormat.Builder()
-                                    .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
-                                    .setSampleRate(sampleRate)
-                                    .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
-                                    .build()
-                    )
-                    .setBufferSizeInBytes(bufferSize)
-                    .setTransferMode(AudioTrack.MODE_STREAM)
-                    .build()
-
-            audioTrack?.play()
-            Timber.d("🔊 AudioTrack started")
-        }
-
-        audioTrack?.write(data, 0, data.size)
-    }
-
-    fun stop() {
-        isRunning = false
-
-        try {
-            audioTrack?.stop()
-            audioTrack?.release()
-        } catch (_: Exception) {
-        }
-
-        audioTrack = null
-        scope.cancel()
-        Timber.d("🛑 MatrixPttReceiver stopped")
-    }
-}*/
-
 
 class MatrixPttReceiver(
         private val context: Context,
@@ -344,34 +249,34 @@ class MatrixPttReceiver(
     private var toDeviceListener: org.matrix.android.sdk.api.session.LiveEventListener? = null
 
     fun startListening() {
-        Timber.d("🎧 MatrixPttReceiver.startListening() called for room: $roomId")
+        Timber.d("MatrixPttReceiver.startListening() called for room: $roomId")
 
-        // 🚨 حماية من تشغيل مثيلات متعددة
+        // Protection against multiple instances
         synchronized(this) {
             if (isRunning) {
-                Timber.d("⚠️ MatrixPttReceiver already running, ignoring start request")
+                Timber.d("MatrixPttReceiver already running, ignoring start request")
                 return
             }
 
             isRunning = true
-            Timber.d("✅ MatrixPttReceiver isRunning set to true")
+            Timber.d("MatrixPttReceiver isRunning set to true")
         }
 
-        // 🚨 فحص وجود الغرفة
+        // Check room existence
         session.getRoom(roomId) ?: run {
-            Timber.w("⚠️ MatrixPttReceiver: room not found $roomId")
+            Timber.w("MatrixPttReceiver: room not found $roomId")
             synchronized(this) {
                 isRunning = false
             }
             return
         }
 
-        Timber.d("🎧 Starting MatrixPttReceiver (to-device) for room: $roomId")
+        Timber.d("Starting MatrixPttReceiver (to-device) for room: $roomId")
 
         try {
             setupToDeviceListener()
         } catch (e: Exception) {
-            Timber.e(e, "❌ Failed to setup to-device listener")
+            Timber.e(e, "Failed to setup to-device listener")
             synchronized(this) {
                 isRunning = false
             }
@@ -379,163 +284,114 @@ class MatrixPttReceiver(
     }
 
     private fun setupToDeviceListener() {
-        Timber.d("🎧 Setting up to-device listener for PTT receiver")
+        Timber.d("Setting up to-device listener for PTT receiver")
 
-        // 🚀 إعداد مستمع لـ to-device events مباشرة
+        // Setup listener for to-device events directly
         toDeviceListener = object : org.matrix.android.sdk.api.session.LiveEventListener {
             override fun onLiveEvent(roomId: String, event: org.matrix.android.sdk.api.session.events.model.Event) {
-                // نتجاهل live events العادية
+                // Ignore regular live events
             }
 
             override fun onPaginatedEvent(roomId: String, event: org.matrix.android.sdk.api.session.events.model.Event) {
-                // نتجاهل paginated events
+                // Ignore paginated events
             }
 
             override fun onEventDecrypted(event: org.matrix.android.sdk.api.session.events.model.Event, clearEvent: org.matrix.android.sdk.api.util.JsonDict) {
-                // نتجاهل decryption events
+                // Ignore decryption events
             }
 
             override fun onEventDecryptionError(event: org.matrix.android.sdk.api.session.events.model.Event, cryptoError: org.matrix.android.sdk.api.session.crypto.MXCryptoError) {
-                // نتجاهل decryption errors
+                // Ignore decryption errors
             }
 
             override fun onLiveToDeviceEvent(event: org.matrix.android.sdk.api.session.events.model.Event) {
-                // 🎯 هنا نستقبل to-device events!
-                Timber.d("🎯 onLiveToDeviceEvent called with event type: ${event.type}")
+                // Here we receive to-device events!
+                Timber.d("onLiveToDeviceEvent called with event type: ${event.type}")
 
                 if (!isRunning) {
-                    Timber.d("🚫 PTT receiver not running, ignoring event")
+                    Timber.d("PTT receiver not running, ignoring event")
                     return
                 }
 
                 if (event.type == "m.ptt.audio") {
-                    Timber.d("✅ Received PTT audio to-device event!")
+                    Timber.d("Received PTT audio to-device event!")
                     val content = event.content ?: run {
-                        Timber.w("⚠️ Event content is null")
+                        Timber.w("Event content is null")
                         return
                     }
 
                     val eventRoomId = content["room_id"] as? String
                     val senderId = content["sender_id"] as? String
-                    Timber.d("📋 Event details: roomId=$eventRoomId, senderId=$senderId, myUserId=${session.myUserId}")
+                    Timber.d("Event details: roomId=$eventRoomId, senderId=$senderId, myUserId=${session.myUserId}")
 
-                    // 🎯 فلترة الأحداث للغرفة الصحيحة وتجاهل رسائلي
+                    // Filter events for correct room and ignore my own messages
                     if (eventRoomId == roomId && senderId != session.myUserId) {
                         val audioData = content["audio_data"] as? String
                         val encoding = content["encoding"] as? String
 
-                        Timber.d("🎵 Audio data length: ${audioData?.length}, encoding: $encoding")
+                        Timber.d("Audio data length: ${audioData?.length}, encoding: $encoding")
 
                         if (audioData != null && encoding == "pcm_16bit") {
                             try {
                                 val pcm = Base64.decode(audioData, Base64.NO_WRAP)
-                                Timber.d("🔊 Playing PTT audio chunk (${pcm.size} bytes)")
+                                Timber.d("Playing PTT audio chunk (${pcm.size} bytes)")
                                 
-                                // 🚨 حل مبسط: استخدام الدالة البسيطة مباشرة
+                                // Simple solution: use simple function directly
                                 playPcmData(pcm)
                             } catch (e: Exception) {
-                                Timber.e(e, "❌ Failed to decode/play PTT to-device chunk")
+                                Timber.e(e, "Failed to decode/play PTT to-device chunk")
                             }
                         } else {
-                            Timber.w("⚠️ Invalid audio data or encoding: audioData=${audioData?.length}, encoding=$encoding")
+                            Timber.w("Invalid audio data or encoding: audioData=${audioData?.length}, encoding=$encoding")
                         }
                     } else {
-                        Timber.d("🚫 Event filtered out: room match=${eventRoomId == roomId}, sender match=${senderId != session.myUserId}")
+                        Timber.d("Event filtered out: room match=${eventRoomId == roomId}, sender match=${senderId != session.myUserId}")
                     }
                 } else {
-                    Timber.d("🚫 Ignoring non-PTT event type: ${event.type}")
+                    Timber.d("Ignoring non-PTT event type: ${event.type}")
                 }
             }
         }
         
-        // تسجيل المستمع
+        // Register listener
         toDeviceListener?.let { listener ->
-            Timber.d("📝 Registering to-device listener with Matrix SDK")
+            Timber.d("Registering to-device listener with Matrix SDK")
             session.eventStreamService().addEventStreamListener(listener)
-            Timber.d("✅ PTT to-device listener registered successfully for room: $roomId")
+            Timber.d("PTT to-device listener registered successfully for room: $roomId")
         } ?: run {
-            Timber.e("❌ Failed to create to-device listener!")
+            Timber.e("Failed to create to-device listener!")
         }
     }
 
-    // 🚨 دالة محمية جديدة لتشغيل الصوت بدون تعطل
-    private suspend fun playPcmDataSafe(data: ByteArray) {
-        Timber.d("🔊 playPcmDataSafe called with ${data.size} bytes on ${Thread.currentThread().name}")
 
-        // 🚨 فحص أولي للبيانات
-        if (data.isEmpty()) {
-            Timber.w("⚠️ Empty audio data received, ignoring")
-            return
-        }
-
-        if (data.size > 512 * 1024) { // 512KB limit لمنع OutOfMemoryError
-            Timber.e("❌ Audio data too large: ${data.size} bytes, ignoring")
-            return
-        }
-
-        // 🚨 فحص سلامة البيانات بحماية من الأخطاء
-        val processedData = try {
-            if (data.size % 2 != 0) {
-                Timber.w("⚠️ Audio data size not even, truncating")
-                data.copyOf(data.size - 1)
-            } else {
-                data
-            }
-        } catch (e: Exception) {
-            Timber.e(e, "❌ Data validation failed")
-            return
-        }
-
-        // 🚨 تشغيل على Main thread مع حماية من الأخطاء
-        try {
-            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main.immediate) {
-                // 🚨 Synchronized access لمنع concurrent modification
-                synchronized(this@MatrixPttReceiver) {
-                    try {
-                        playPcmDataInternal(processedData)
-                    } catch (e: Exception) {
-                        Timber.e(e, "💥 Critical error in playPcmDataInternal")
-                        // 🚨 تنظيف في حالة الخطأ
-                        try {
-                            cleanupAudioTrack()
-                        } catch (cleanupError: Exception) {
-                            Timber.e(cleanupError, "❌ Error during emergency cleanup")
-                        }
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            Timber.e(e, "💥 Critical error in playPcmDataSafe context switch")
-        }
-    }
 
     private fun playPcmDataInternal(data: ByteArray) {
-        Timber.d("🔊 playPcmDataInternal called with ${data.size} bytes")
+        Timber.d("playPcmDataInternal called with ${data.size} bytes")
 
-        // 🚨 حماية شاملة من كل النواحي
+        // Comprehensive protection
         try {
-            // 🚨 فحص شامل قبل البدء
+            // Complete check before starting
             if (!isRunning) {
-                Timber.w("⚠️ Receiver not running, ignoring audio data")
+                Timber.w("Receiver not running, ignoring audio data")
                 return
             }
 
             if (audioTrack == null) {
-                Timber.d("🎵 Initializing AudioTrack for Matrix PTT")
+                Timber.d("Initializing AudioTrack for Matrix PTT")
 
-                // 🎯 إعدادات مُحسنة للسرعة والوضوح
+                // Optimized settings for speed and clarity
                 val sampleRate = 16000
-                val bufferSize = 2048 // 🔥 ثابت ومجرب للوضوح - مثل الكود المحسن
+                val bufferSize = 2048 // Proven optimal size for clarity
 
-                Timber.d("🎵 AudioTrack: sampleRate=$sampleRate, bufferSize=$bufferSize")
+                Timber.d("AudioTrack: sampleRate=$sampleRate, bufferSize=$bufferSize")
 
-                // ✅ إعداد AudioManager بسيط وفعال
+                // Simple and effective AudioManager setup
                 val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
                 audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
                 @Suppress("DEPRECATION")
                 audioManager.isSpeakerphoneOn = true
 
-                // ✅ إعداد جهاز الاتصال للإصدارات الجديدة
+                // Setup communication device for newer versions
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                     try {
                         audioManager.availableCommunicationDevices.firstOrNull {
@@ -544,17 +400,17 @@ class MatrixPttReceiver(
                             audioManager.setCommunicationDevice(it)
                         }
                     } catch (e: Exception) {
-                        Timber.w(e, "⚠️ Failed to set communication device")
+                        Timber.w(e, "Failed to set communication device")
                     }
                 }
 
-                // 🚨 إنشاء AudioTrack مع retry logic محسن
+                // Create AudioTrack with improved retry logic
                 var retryCount = 0
                 var trackCreated = false
 
                 while (retryCount < 3 && !trackCreated) {
                     try {
-                        Timber.d("🎵 Creating AudioTrack (attempt ${retryCount + 1}/3)")
+                        Timber.d("Creating AudioTrack (attempt ${retryCount + 1}/3)")
 
                         audioTrack = AudioTrack.Builder()
                                 .setAudioAttributes(

@@ -16,14 +16,10 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.matrix.android.sdk.api.session.Session
 import org.matrix.android.sdk.api.session.getRoom
-import org.matrix.android.sdk.api.query.QueryStringValue
-import org.matrix.android.sdk.api.session.room.members.roomMemberQueryParams
-import org.matrix.android.sdk.api.session.room.model.Membership
 import timber.log.Timber
 import java.io.BufferedOutputStream
 import java.net.ServerSocket
@@ -85,29 +81,6 @@ class PttManager(
                 val isLocalHost = !remoteIp.isNullOrEmpty() && (remoteIp == "127.0.0.1" || remoteIp == localIp)
                 Timber.d("🎯 Transport type: $transportType (isLocalHost=$isLocalHost)")
 
-                // 🎯 1. تحديد أولوية الغرفة من topic
-                /*val roomSummary = room.roomSummary()
-                val roomTopic = roomSummary?.topic
-                val roomPriority = PttMatrixSyncHandler.extractRoomPriority(roomTopic)
-                PttMatrixSyncHandler.updateRoomPriority(roomId, roomPriority)
-
-                Timber.d("🎯 Room priority: $roomId → $roomPriority (topic: '$roomTopic')")
-
-                // 🚨 2. طلب التحدث مع مراعاة الأولويات والصلاحيات الإدارية
-                var floorGranted = PttMatrixSyncHandler.requestSpeakingFloorWithPriority(roomId, session.myUserId)
-
-                if (!floorGranted) {
-                    // 🛡️ المحاولة الثانية: فحص التجاوز الإداري داخل نفس الغرفة
-                    val adminOverride = PttMatrixSyncHandler.requestAdminOverride(room, session.myUserId)
-                    if (adminOverride) {
-                        floorGranted = true
-                        Timber.d("✅ PTT granted via admin override")
-                    } else {
-                        Timber.w("🚫 PTT denied - no priority override and not an admin")
-                        return@launch
-                    }
-                }*/
-
                 // 3. إدارة IP مركزية وذكية
                 val success = PttCoordinator.ensureIpAvailable(room, session.myUserId, localIp)
                 if (!success) {
@@ -123,7 +96,7 @@ class PttManager(
                 }
 
                 // 3. بدء TCP Server بعد ضمان Matrix coordination
-                kotlinx.coroutines.withContext(Dispatchers.Main) {
+                withContext(Dispatchers.Main) {
                     when (transportType) {
                         PttTransportType.TCP -> {
                             tcpSender = PttTcpSender(
@@ -231,11 +204,10 @@ class MatrixPttSender(
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     companion object {
-        const val SAMPLE_RATE = 16000 // مثل الكود الممتاز للتوافق
-        const val BUFFER_SIZE = 2048 // 🔥 ثابت ومجرب للوضوح - مثل الكود المحسن
+        const val SAMPLE_RATE = 16000
+        const val BUFFER_SIZE = 2048 // Optimal size for clear audio
         const val MAX_RECORDING_TIME_MS = 30_000L
         const val WARNING_TIME_SECONDS = 5
-        // 🚀 إزالة التأخير المصطنع تماماً للـ streaming الفوري
     }
 
     fun startStreaming() {
@@ -251,12 +223,12 @@ class MatrixPttSender(
 
             // 🎯 الحصول على جميع أعضاء الغرفة للإرسال المباشر
             val roomMembers = room.membershipService().getRoomMembers(
-                org.matrix.android.sdk.api.session.room.members.roomMemberQueryParams {
-                    memberships = listOf(org.matrix.android.sdk.api.session.room.model.Membership.JOIN)
-                    excludeSelf = true
-                }
+                    org.matrix.android.sdk.api.session.room.members.roomMemberQueryParams {
+                        memberships = listOf(org.matrix.android.sdk.api.session.room.model.Membership.JOIN)
+                        excludeSelf = true
+                    }
             )
-            
+
             if (roomMembers.isEmpty()) {
                 Timber.w("⚠️ No other members in room for PTT")
                 return@launch
@@ -283,17 +255,17 @@ class MatrixPttSender(
 
             audioRecord?.startRecording()
 
-                            while (isStreaming && (System.currentTimeMillis() - startTime) < MAX_RECORDING_TIME_MS) {
+            while (isStreaming && (System.currentTimeMillis() - startTime) < MAX_RECORDING_TIME_MS) {
                 val read = audioRecord?.read(buffer, 0, buffer.size) ?: 0
                 if (read > 0) {
                     val chunk = buffer.copyOf(read)
                     val base64 = Base64.encodeToString(chunk, Base64.NO_WRAP)
                     try {
-                        // 🚀 إرسال مباشر للأجهزة بدون timeline pollution
+                        // Direct to-device messaging without timeline pollution
                         val targets = roomMembers.associate { member ->
-                            member.userId to listOf("*") // كل الأجهزة للمستخدم
+                            member.userId to listOf("*") // All devices for user
                         }
-                        
+
                         session.toDeviceService().sendToDevice(
                                 eventType = "m.ptt.audio",
                                 targets = targets,
@@ -314,20 +286,18 @@ class MatrixPttSender(
                         Timber.e(e, "❌ Failed to send PTT to-device chunk")
                     }
                 } else if (read == 0) {
-                    // لا بيانات صوتية، استمر فوراً
+                    // No audio data, continue immediately
                 } else {
-                    Timber.w("❌ AudioRecord read error: $read")
+                    Timber.w("AudioRecord read error: $read")
                     break
                 }
-                
-                // 🚀 لا delay مصطنع = streaming فوري مستمر!
             }
 
-            Timber.d("🏁 Matrix PTT streaming ended: $packetCount chunks sent via to-device")
+            Timber.d("Matrix PTT streaming ended: $packetCount chunks sent via to-device")
 
-            // Cleanup + Notify
+            // Cleanup and notify
             stopStreaming()
-            kotlinx.coroutines.withContext(Dispatchers.Main) {
+            withContext(Dispatchers.Main) {
                 onTimeoutCallback?.invoke()
                 globalTimeoutCallback?.invoke(roomId)
             }
@@ -409,11 +379,11 @@ class PttTcpSender(
             }
         }
 
-        // بدء التسجيل المحسن للوضوح
+        // Start optimized recording for clarity
         scope.launch {
             try {
                 val sampleRate = 16000
-                val bufferSize = 2048 // 🔥 ثابت ومجرب للوضوح
+                val bufferSize = 2048 // Proven optimal size
 
                 val buffer = ByteArray(bufferSize)
 
@@ -510,18 +480,18 @@ class PttTcpSender(
                             }
                         }
                     } else if (read == 0) {
-                        // لا بيانات صوتية، استمر فوراً بدون انتظار
+                        // No audio data, continue immediately without waiting
                     } else {
-                        Timber.w("❌ AudioRecord read error: $read")
+                        Timber.w("AudioRecord read error: $read")
                         break
                     }
-                    
-                    // 🚀 لا delay مصطنع = streaming فوري مستمر!
+
+                    // No artificial delay = continuous streaming
                 }
 
-                // 📊 إحصائيات نهاية التسجيل
+                // Final recording statistics
                 val finalDuration = System.currentTimeMillis() - recordingStartTime
-                Timber.d("🏁 Recording ended: ${finalDuration}ms duration, $packetCount packets sent, ${totalBytesSent} total bytes")
+                Timber.d("Recording ended: ${finalDuration}ms duration, $packetCount packets sent, ${totalBytesSent} total bytes")
             } catch (e: Exception) {
                 Timber.e("Audio error: ${e.message}")
             } finally {
@@ -594,31 +564,31 @@ class PttTcpSender(
                         System.arraycopy(buffer, 0, combinedData, tokenBytes.size, read)
 
                         outputStream.write(combinedData)
-                        outputStream.flush() // ✅ Flush فوري للوصول السريع
+                        outputStream.flush() // Immediate flush for fast delivery
                         packetCount++
 
                         if (packetCount % 5 == 0) {
-                            Timber.d("📤 Sent client packet #$packetCount")
+                            Timber.d("Sent client packet #$packetCount")
                         }
                     } else if (read == 0) {
-                        // لا بيانات صوتية، استمر فوراً
+                        // No audio data, continue immediately
                     } else {
-                        Timber.w("❌ AudioRecord read error: $read")
+                        Timber.w("AudioRecord read error: $read")
                         break
                     }
 
                     if (System.currentTimeMillis() - startTime >= MAX_RECORDING_TIME_SECONDS * 1000L) {
-                        Timber.d("⏰ Client recording timeout")
+                        Timber.d("Client recording timeout")
                         break
                     }
-                    
-                    // 🚀 لا delay مصطنع = streaming فوري مستمر!
+
+                    // No artificial delay = continuous streaming
                 }
 
                 outputStream.close()
                 socket.close()
             } catch (e: Exception) {
-                Timber.e(e, "❌ Error in client mode sending")
+                Timber.e(e, "Error in client mode sending")
             } finally {
                 stopSending()
                 withContext(Dispatchers.Main) {
