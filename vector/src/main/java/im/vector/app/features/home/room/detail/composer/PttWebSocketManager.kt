@@ -232,10 +232,10 @@ class MatrixPttSender(
 
     companion object {
         const val SAMPLE_RATE = 16000 // مثل الكود الممتاز للتوافق
-        const val BUFFER_SIZE = 4096 // 🎯 توازن مثالي: يمنع الصدى ويضمن الوضوح والاستمرارية
+        const val BUFFER_SIZE = 2048 // 🔥 ثابت ومجرب للوضوح - مثل الكود المحسن
         const val MAX_RECORDING_TIME_MS = 30_000L
         const val WARNING_TIME_SECONDS = 5
-        const val CHUNK_INTERVAL_MS = 30L // 🎯 توازن: سريع لكن يضمن استقرار البيانات
+        // 🚀 إزالة التأخير المصطنع تماماً للـ streaming الفوري
     }
 
     fun startStreaming() {
@@ -283,7 +283,7 @@ class MatrixPttSender(
 
             audioRecord?.startRecording()
 
-            while (isStreaming && (System.currentTimeMillis() - startTime) < MAX_RECORDING_TIME_MS) {
+                            while (isStreaming && (System.currentTimeMillis() - startTime) < MAX_RECORDING_TIME_MS) {
                 val read = audioRecord?.read(buffer, 0, buffer.size) ?: 0
                 if (read > 0) {
                     val chunk = buffer.copyOf(read)
@@ -313,9 +313,14 @@ class MatrixPttSender(
                     } catch (e: Exception) {
                         Timber.e(e, "❌ Failed to send PTT to-device chunk")
                     }
+                } else if (read == 0) {
+                    // لا بيانات صوتية، استمر فوراً
+                } else {
+                    Timber.w("❌ AudioRecord read error: $read")
+                    break
                 }
-
-                delay(CHUNK_INTERVAL_MS)
+                
+                // 🚀 لا delay مصطنع = streaming فوري مستمر!
             }
 
             Timber.d("🏁 Matrix PTT streaming ended: $packetCount chunks sent via to-device")
@@ -407,8 +412,8 @@ class PttTcpSender(
         // بدء التسجيل المحسن للوضوح
         scope.launch {
             try {
-                val sampleRate = 16000 // مثل الكود الممتاز للتوافق
-                val bufferSize = 4096 // 🎯 توازن مثالي: يمنع الصدى ويضمن الوضوح والاستمرارية
+                val sampleRate = 16000
+                val bufferSize = 2048 // 🔥 ثابت ومجرب للوضوح
 
                 val buffer = ByteArray(bufferSize)
 
@@ -505,11 +510,13 @@ class PttTcpSender(
                             }
                         }
                     } else if (read == 0) {
-                        Timber.d("📭 No audio data to send")
+                        // لا بيانات صوتية، استمر فوراً بدون انتظار
                     } else {
                         Timber.w("❌ AudioRecord read error: $read")
                         break
                     }
+                    
+                    // 🚀 لا delay مصطنع = streaming فوري مستمر!
                 }
 
                 // 📊 إحصائيات نهاية التسجيل
@@ -556,8 +563,8 @@ class PttTcpSender(
                 val socket = Socket(remoteIp, serverPort)
                 val outputStream = BufferedOutputStream(socket.getOutputStream())
 
-                val sampleRate = 16000 // مثل الكود الممتاز للتوافق
-                val bufferSize = 4096 // 🎯 توازن مثالي: يمنع الصدى ويضمن الوضوح والاستمرارية
+                val sampleRate = 16000
+                val bufferSize = 2048 // 🔥 ثابت ومجرب للوضوح
                 val buffer = ByteArray(bufferSize)
 
                 audioRecord = AudioRecord(
@@ -587,18 +594,25 @@ class PttTcpSender(
                         System.arraycopy(buffer, 0, combinedData, tokenBytes.size, read)
 
                         outputStream.write(combinedData)
-                        outputStream.flush()
+                        outputStream.flush() // ✅ Flush فوري للوصول السريع
                         packetCount++
 
                         if (packetCount % 5 == 0) {
                             Timber.d("📤 Sent client packet #$packetCount")
                         }
+                    } else if (read == 0) {
+                        // لا بيانات صوتية، استمر فوراً
+                    } else {
+                        Timber.w("❌ AudioRecord read error: $read")
+                        break
                     }
 
                     if (System.currentTimeMillis() - startTime >= MAX_RECORDING_TIME_SECONDS * 1000L) {
                         Timber.d("⏰ Client recording timeout")
                         break
                     }
+                    
+                    // 🚀 لا delay مصطنع = streaming فوري مستمر!
                 }
 
                 outputStream.close()

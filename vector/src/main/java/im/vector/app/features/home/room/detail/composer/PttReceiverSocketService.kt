@@ -40,7 +40,7 @@ class PttTcpReceiverService : Service() {
     private val sampleRate = 16000
     private val channelConfig = AudioFormat.CHANNEL_OUT_MONO
     private val audioEncoding = AudioFormat.ENCODING_PCM_16BIT
-    private val audioBufferSize = 4096 // 🎯 توازن مثالي: يمنع الصدى ويضمن الوضوح
+    private val audioBufferSize = 2048 // 🔥 ثابت ومجرب للوضوح - مثل الكود المحسن
 
     private var isRunning = false
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -87,13 +87,12 @@ class PttTcpReceiverService : Service() {
                     val input = BufferedInputStream(socket.getInputStream(), audioBufferSize)
                     Timber.d("🎙️ Starting audio reception from $currentSpeakerId in room $currentRoomId")
 
-                    // ✅ الخطوة 2: إعداد AudioTrack محسن للجودة والاستجابة
+                    // ✅ إعداد AudioTrack بسيط وفعال - مثل الكود المحسن
                     val audioTrack = AudioTrack.Builder()
                             .setAudioAttributes(
                                     AudioAttributes.Builder()
-                                            .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION) // 🎯 للمحادثات الصوتية
-                                            .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH) // 🎯 محسن للكلام
-                                            .setFlags(AudioAttributes.FLAG_AUDIBILITY_ENFORCED) // 🎯 ضمان وضوح الصوت
+                                            .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
+                                            .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
                                             .build()
                             )
                             .setAudioFormat(
@@ -103,36 +102,14 @@ class PttTcpReceiverService : Service() {
                                             .setChannelMask(channelConfig)
                                             .build()
                             )
-                            .setBufferSizeInBytes(audioBufferSize) // 🎯 استخدام البافر المحسن
+                            .setBufferSizeInBytes(2048) // 🔥 حجم ثابت ومجرب
                             .setTransferMode(AudioTrack.MODE_STREAM)
-                            .setPerformanceMode(AudioTrack.PERFORMANCE_MODE_LOW_LATENCY) // 🎯 أداء للاستجابة السريعة
                             .build()
-
-                    // 🎚️ رفع مستوى الصوت
-                    audioTrack.setVolume(1.0f)
-                    @Suppress("DEPRECATION")
-                    audioTrack.setStereoVolume(1.0f, 1.0f)
 
                     val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
                     audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
                     @Suppress("DEPRECATION")
                     audioManager.isSpeakerphoneOn = true
-                    
-                    // 🎯 تحسينات لجودة الصوت ومنع الصدى
-                    try {
-                        // ضبط مستوى صوت متوازن
-                        @Suppress("DEPRECATION")
-                        val maxVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_VOICE_CALL)
-                        val optimalVolume = (maxVolume * 0.85).toInt() // 85% من الحد الأقصى
-                        audioManager.setStreamVolume(AudioManager.STREAM_VOICE_CALL, optimalVolume, 0)
-                        
-                        // تحسين إعدادات الصوت للوضوح
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                            audioManager.setParameters("noise_suppression=off;echo_cancellation=off") // نتحكم نحن بالـ echo
-                        }
-                    } catch (e: Exception) {
-                        Timber.w(e, "⚠️ Failed to optimize audio settings")
-                    }
 
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                         audioManager.availableCommunicationDevices.firstOrNull {
@@ -190,18 +167,12 @@ class PttTcpReceiverService : Service() {
                                     }
 
                                     if (audioDataLength > 0) {
-                                        // 🎯 استخراج بيانات الصوت
-                                        val audioData = buffer.copyOfRange(tokenLength, read)
-
-                                        // 🎯 تحسين جودة الصوت
-                                        val enhancedAudio = enhanceAudioQuality(audioData)
-
-                                        // ✅ كتابة الصوت المحسن
-                                        var offset = 0
-                                        var remaining = enhancedAudio.size
+                                        // ✅ كتابة مبسطة مثل الكود المحسن مع partial write handling
+                                        var offset = tokenLength
+                                        var remaining = audioDataLength
 
                                         while (remaining > 0) {
-                                            val written = audioTrack.write(enhancedAudio, offset, remaining, AudioTrack.WRITE_BLOCKING)
+                                            val written = audioTrack.write(buffer, offset, remaining)
                                             if (written <= 0) break
                                             offset += written
                                             remaining -= written
@@ -262,110 +233,7 @@ class PttTcpReceiverService : Service() {
         }
     }
 
-    /**
-     * 🎯 تحسين جودة الصوت وإزالة الضوضاء
-     */
-    private fun enhanceAudioQuality(audioData: ByteArray): ByteArray {
-        // تحويل إلى short array للمعالجة
-        val shortArray = ByteArray(audioData.size / 2).mapIndexed { index, _ ->
-            (audioData[index * 2 + 1].toInt() shl 8 or (audioData[index * 2].toInt() and 0xFF)).toShort()
-        }.toTypedArray()
 
-        // 🎚️ تطبيق gain لرفع مستوى الصوت
-        val gain = 2.5f // مضاعفة الصوت 2.5 مرة
-        val processedShortArray = shortArray.map { sample ->
-            val amplified = (sample * gain).toInt()
-            when {
-                amplified > Short.MAX_VALUE -> Short.MAX_VALUE
-                amplified < Short.MIN_VALUE -> Short.MIN_VALUE
-                else -> amplified.toShort()
-            }
-        }.toTypedArray()
-
-        // 🔇 تطبيق noise gate بسيط
-        val noiseGateThreshold = 500 // عتبة الضوضاء
-        val noiseGatedArray = processedShortArray.map { sample ->
-            if (Math.abs(sample.toInt()) < noiseGateThreshold) {
-                0.toShort() // كتم الضوضاء المنخفضة
-            } else {
-                sample
-            }
-        }.toTypedArray()
-
-        // 🎵 تطبيق filter بسيط لتحسين الوضوح
-        val filteredArray = applySimpleFilter(noiseGatedArray)
-
-        // تحويل مرة أخرى إلى byte array
-        return ByteArray(filteredArray.size * 2).also { result ->
-            filteredArray.forEachIndexed { index, sample ->
-                result[index * 2] = (sample.toInt() and 0xFF).toByte()
-                result[index * 2 + 1] = ((sample.toInt() shr 8) and 0xFF).toByte()
-            }
-        }
-    }
-
-    /**
-     * 🎵 تطبيق filter بسيط لتحسين وضوح الصوت
-     */
-    private fun applySimpleFilter(audioData: Array<Short>): Array<Short> {
-        val result = Array(audioData.size) { 0.toShort() }
-
-        for (i in 1 until audioData.size - 1) {
-            // تطبيق averaging filter لتنعيم الصوت وإزالة الضوضاء العالية التردد
-            val filtered = ((audioData[i - 1] + audioData[i] + audioData[i + 1]) / 3.0).toInt()
-            result[i] = when {
-                filtered > Short.MAX_VALUE -> Short.MAX_VALUE
-                filtered < Short.MIN_VALUE -> Short.MIN_VALUE
-                else -> filtered.toShort()
-            }
-        }
-
-        // الحفاظ على العينات الأولى والأخيرة
-        result[0] = audioData[0]
-        result[result.lastIndex] = audioData[audioData.lastIndex]
-
-        return result
-    }
-
-    /**
-     * 🎯 معالجة صوتية بسيطة وآمنة - رفع مستوى الصوت فقط
-     */
-    private fun amplifyAudioSimple(audioData: ByteArray): ByteArray {
-        try {
-            if (audioData.isEmpty() || audioData.size % 2 != 0) {
-                return audioData
-            }
-
-            val result = ByteArray(audioData.size)
-            val gain = 1.5f // رفع بسيط وآمن للصوت
-
-            for (i in 0 until audioData.size step 2) {
-                // قراءة العينة
-                val byte1 = audioData[i].toInt() and 0xFF
-                val byte2 = audioData[i + 1].toInt() and 0xFF
-                var sample = (byte2 shl 8 or byte1).toShort()
-
-                // تطبيق gain
-                val amplified = (sample * gain).toInt()
-
-                // clipping protection
-                val finalSample = when {
-                    amplified > Short.MAX_VALUE -> Short.MAX_VALUE
-                    amplified < Short.MIN_VALUE -> Short.MIN_VALUE
-                    else -> amplified.toShort()
-                }
-
-                // كتابة العينة
-                result[i] = (finalSample.toInt() and 0xFF).toByte()
-                result[i + 1] = ((finalSample.toInt() shr 8) and 0xFF).toByte()
-            }
-
-            return result
-        } catch (e: Exception) {
-            Timber.e(e, "💥 Error in amplifyAudioSimple, returning original data")
-            return audioData
-        }
-    }
 
     override fun onDestroy() {
         super.onDestroy()
@@ -655,33 +523,17 @@ class MatrixPttReceiver(
             if (audioTrack == null) {
                 Timber.d("🎵 Initializing AudioTrack for Matrix PTT")
 
-                // 🎯 إعدادات متوازنة: وضوح + سرعة استجابة
+                // 🎯 إعدادات مُحسنة للسرعة والوضوح
                 val sampleRate = 16000
-                val bufferSize = 4096 // 🎯 توازن مثالي: يمنع الصدى ويضمن الوضوح والاستمرارية
+                val bufferSize = 2048 // 🔥 ثابت ومجرب للوضوح - مثل الكود المحسن
 
                 Timber.d("🎵 AudioTrack: sampleRate=$sampleRate, bufferSize=$bufferSize")
 
-                // ✅ إعداد AudioManager مع منع الصدى
+                // ✅ إعداد AudioManager بسيط وفعال
                 val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
                 audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
                 @Suppress("DEPRECATION")
                 audioManager.isSpeakerphoneOn = true
-                
-                // 🎯 تحسينات لجودة الصوت ومنع الصدى
-                try {
-                    // ضبط مستوى صوت متوازن
-                    @Suppress("DEPRECATION")
-                    val maxVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_VOICE_CALL)
-                    val optimalVolume = (maxVolume * 0.85).toInt() // 85% من الحد الأقصى
-                    audioManager.setStreamVolume(AudioManager.STREAM_VOICE_CALL, optimalVolume, 0)
-                    
-                    // تحسين إعدادات الصوت للوضوح
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                        audioManager.setParameters("noise_suppression=off;echo_cancellation=off") // نتحكم نحن بالـ echo
-                    }
-                } catch (e: Exception) {
-                    Timber.w(e, "⚠️ Failed to optimize audio settings")
-                }
 
                 // ✅ إعداد جهاز الاتصال للإصدارات الجديدة
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -709,7 +561,6 @@ class MatrixPttReceiver(
                                         AudioAttributes.Builder()
                                                 .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
                                                 .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-                                                .setFlags(AudioAttributes.FLAG_AUDIBILITY_ENFORCED) // 🎯 ضمان وضوح الصوت
                                                 .build()
                                 )
                                 .setAudioFormat(
@@ -721,7 +572,6 @@ class MatrixPttReceiver(
                                 )
                                 .setBufferSizeInBytes(bufferSize)
                                 .setTransferMode(AudioTrack.MODE_STREAM)
-                                .setPerformanceMode(AudioTrack.PERFORMANCE_MODE_LOW_LATENCY) // 🎯 أداء للاستجابة السريعة
                                 .build()
 
                         if (audioTrack?.state == AudioTrack.STATE_INITIALIZED) {
@@ -786,52 +636,30 @@ class MatrixPttReceiver(
 
             Timber.d("📝 Writing ${data.size} bytes to AudioTrack")
 
-            // 🚀 كتابة محسنة للاستمرارية والوضوح
+            // 🚀 كتابة مبسطة وفعالة - مثل الكود المحسن
             var offset = 0
             var remaining = data.size
-            var totalWritten = 0
-            var writeErrors = 0
-            val maxWriteErrors = 3
 
-            while (remaining > 0 && writeErrors < maxWriteErrors) {
+            while (remaining > 0) {
                 try {
-                    // 🚨 فحص مجدد لكل write operation
                     val safeTrack = audioTrack
                     if (safeTrack == null || safeTrack.state != AudioTrack.STATE_INITIALIZED) {
                         Timber.e("❌ AudioTrack became invalid during write")
                         break
                     }
 
-                    // 🎯 استراتيجية كتابة ذكية
-                    val toWrite = minOf(remaining, 4096) // chunks متوسطة للتوازن
-                    val written = safeTrack.write(data, offset, toWrite, AudioTrack.WRITE_BLOCKING)
-
-                    if (written > 0) {
-                        offset += written
-                        remaining -= written
-                        totalWritten += written
-                        writeErrors = 0 // reset error counter on success
-                    } else if (written == 0) {
-                        // AudioTrack busy, try smaller chunk
-                        Thread.sleep(1)
-                        writeErrors++
-                    } else {
-                        Timber.w("⚠️ AudioTrack.write returned $written")
-                        writeErrors++
-                    }
+                    val written = safeTrack.write(data, offset, remaining)
+                    if (written <= 0) break
+                    offset += written
+                    remaining -= written
                 } catch (e: Exception) {
-                    Timber.e(e, "💥 Write error #${writeErrors + 1}")
-                    writeErrors++
-                    if (writeErrors < maxWriteErrors) {
-                        Thread.sleep(2) // brief pause before retry
-                    }
+                    Timber.e(e, "💥 Write error")
+                    break
                 }
             }
 
-            if (totalWritten > 0) {
-                Timber.d("✅ Successfully wrote $totalWritten bytes to AudioTrack")
-            } else {
-                Timber.w("⚠️ No data was written to AudioTrack")
+            if (offset > 0) {
+                Timber.d("✅ Successfully wrote $offset bytes to AudioTrack")
             }
 
         } catch (e: Exception) {
@@ -885,16 +713,6 @@ class MatrixPttReceiver(
                 audioManager.mode = AudioManager.MODE_NORMAL
                 @Suppress("DEPRECATION")
                 audioManager.isSpeakerphoneOn = false
-                
-                // 🎯 استعادة مستوى الصوت العادي
-                try {
-                    @Suppress("DEPRECATION")
-                    audioManager.setStreamVolume(AudioManager.STREAM_VOICE_CALL, 
-                        audioManager.getStreamMaxVolume(AudioManager.STREAM_VOICE_CALL), 0)
-                } catch (volumeError: Exception) {
-                    Timber.w(volumeError, "⚠️ Failed to restore volume")
-                }
-                
                 Timber.d("✅ AudioManager reset to normal")
             } catch (e: Exception) {
                 Timber.w(e, "⚠️ Error resetting AudioManager")
@@ -952,110 +770,7 @@ class MatrixPttReceiver(
         }
     }
 
-    /**
-     * 🎯 معالجة صوتية بسيطة وآمنة - رفع مستوى الصوت فقط
-     */
-    private fun amplifyAudioSimple(audioData: ByteArray): ByteArray {
-        try {
-            if (audioData.isEmpty() || audioData.size % 2 != 0) {
-                return audioData
-            }
 
-            val result = ByteArray(audioData.size)
-            val gain = 1.5f // رفع بسيط وآمن للصوت
-
-            for (i in 0 until audioData.size step 2) {
-                // قراءة العينة
-                val byte1 = audioData[i].toInt() and 0xFF
-                val byte2 = audioData[i + 1].toInt() and 0xFF
-                var sample = (byte2 shl 8 or byte1).toShort()
-
-                // تطبيق gain
-                val amplified = (sample * gain).toInt()
-
-                // clipping protection
-                val finalSample = when {
-                    amplified > Short.MAX_VALUE -> Short.MAX_VALUE
-                    amplified < Short.MIN_VALUE -> Short.MIN_VALUE
-                    else -> amplified.toShort()
-                }
-
-                // كتابة العينة
-                result[i] = (finalSample.toInt() and 0xFF).toByte()
-                result[i + 1] = ((finalSample.toInt() shr 8) and 0xFF).toByte()
-            }
-
-            return result
-        } catch (e: Exception) {
-            Timber.e(e, "💥 Error in amplifyAudioSimple, returning original data")
-            return audioData
-        }
-    }
-
-    /**
-     * 🎯 تحسين جودة الصوت وإزالة الضوضاء
-     */
-    private fun enhanceAudioQuality(audioData: ByteArray): ByteArray {
-        // تحويل إلى short array للمعالجة
-        val shortArray = ByteArray(audioData.size / 2).mapIndexed { index, _ ->
-            (audioData[index * 2 + 1].toInt() shl 8 or (audioData[index * 2].toInt() and 0xFF)).toShort()
-        }.toTypedArray()
-
-        // 🎚️ تطبيق gain لرفع مستوى الصوت
-        val gain = 2.5f // مضاعفة الصوت 2.5 مرة
-        val processedShortArray = shortArray.map { sample ->
-            val amplified = (sample * gain).toInt()
-            when {
-                amplified > Short.MAX_VALUE -> Short.MAX_VALUE
-                amplified < Short.MIN_VALUE -> Short.MIN_VALUE
-                else -> amplified.toShort()
-            }
-        }.toTypedArray()
-
-        // 🔇 تطبيق noise gate بسيط
-        val noiseGateThreshold = 500 // عتبة الضوضاء
-        val noiseGatedArray = processedShortArray.map { sample ->
-            if (Math.abs(sample.toInt()) < noiseGateThreshold) {
-                0.toShort() // كتم الضوضاء المنخفضة
-            } else {
-                sample
-            }
-        }.toTypedArray()
-
-        // 🎵 تطبيق filter بسيط لتحسين الوضوح
-        val filteredArray = applySimpleFilter(noiseGatedArray)
-
-        // تحويل مرة أخرى إلى byte array
-        return ByteArray(filteredArray.size * 2).also { result ->
-            filteredArray.forEachIndexed { index, sample ->
-                result[index * 2] = (sample.toInt() and 0xFF).toByte()
-                result[index * 2 + 1] = ((sample.toInt() shr 8) and 0xFF).toByte()
-            }
-        }
-    }
-
-    /**
-     * 🎵 تطبيق filter بسيط لتحسين وضوح الصوت
-     */
-    private fun applySimpleFilter(audioData: Array<Short>): Array<Short> {
-        val result = Array(audioData.size) { 0.toShort() }
-
-        for (i in 1 until audioData.size - 1) {
-            // تطبيق averaging filter لتنعيم الصوت وإزالة الضوضاء العالية التردد
-            val filtered = ((audioData[i - 1] + audioData[i] + audioData[i + 1]) / 3.0).toInt()
-            result[i] = when {
-                filtered > Short.MAX_VALUE -> Short.MAX_VALUE
-                filtered < Short.MIN_VALUE -> Short.MIN_VALUE
-                else -> filtered.toShort()
-            }
-        }
-
-        // الحفاظ على العينات الأولى والأخيرة
-        result[0] = audioData[0]
-        result[result.lastIndex] = audioData[audioData.lastIndex]
-
-        return result
-    }
 
     fun stop() {
         Timber.d("🛑 Stopping MatrixPttReceiver...")
