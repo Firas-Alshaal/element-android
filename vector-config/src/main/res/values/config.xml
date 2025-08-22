@@ -5,7 +5,8 @@
 
     <!-- server urls -->
 <!--    <string name="matrix_org_server_url" translatable="false">http://192.168.82.115:8008</string>-->
-    <string name="matrix_org_server_url" translatable="false">http://10.100.10.162:8008</string>
+<!--    <string name="matrix_org_server_url" translatable="false">http://10.100.10.162:8008</string>-->
+    <string name="matrix_org_server_url" translatable="false">https://eoc.atlascrisis.com/Matrix</string>
 <!--    <string name="matrix_org_server_url" translatable="false">http://2.50.159.120:8008</string>-->
 
     <!--https://matrix.org-->
@@ -38,7 +39,8 @@
     <string-array name="room_directory_servers" translatable="false">
 <!--        <item>http://192.168.82.115:8008</item>-->
         <!--        <item>matrix.org</item>-->
-        <item>http://10.100.10.162:8008</item>
+<!--        <item>http://10.100.10.162:8008</item>-->
+        <item>https://eoc.atlascrisis.com/Matrix</item>
 <!--        <item>http://2.50.159.120:8008</item>-->
         <item>gitter.im</item>
     </string-array>

@@ -12,6 +12,7 @@
         <!-- Localhost for Android emulator -->
         <domain includeSubdomains="true">10.0.2.2</domain>
         <domain includeSubdomains="true">10.100.10.162</domain>
+        <domain includeSubdomains="true">eoc.atlascrisis.com</domain>
         <domain includeSubdomains="true">192.168.82.115</domain>
         <domain includeSubdomains="true">2.50.159.120</domain>
 

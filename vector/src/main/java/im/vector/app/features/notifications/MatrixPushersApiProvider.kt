@@ -6,7 +6,7 @@ import retrofit2.converter.gson.GsonConverterFactory
 
 object MatrixPushersApiProvider {
 
-    private const val BASE_URL = "http://10.100.10.162:8008/"
+    private const val BASE_URL = "https://eoc.atlascrisis.com/Matrix"
 
     private val client: OkHttpClient by lazy {
         OkHttpClient.Builder()

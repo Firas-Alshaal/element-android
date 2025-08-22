@@ -48,7 +48,8 @@ suspend fun uploadVoiceFileToSynapse(
 ): UploadResponse = withContext(Dispatchers.IO) {
     val accessToken = session.sessionParams.credentials.accessToken
     val token = "Bearer $accessToken"
-    val serverUrl = "http://10.100.10.162:8008"
+//    val serverUrl = "http://10.100.10.162:8008"
+    val serverUrl = "https://eoc.atlascrisis.com/Matrix"
     val uploadUrl = "$serverUrl/_matrix/media/v3/upload?filename=$fileName"
 
     val file = File(fileUri.path ?: throw IllegalArgumentException("Invalid URI"))
@@ -128,7 +129,8 @@ fun sendPttNotificationViaHttp(audioUrl: String, roomId: String, receiverPushKey
             put("sender", session.myUserId)
             put("sender_display_name", "PushToTalk Sender")
             put("room_name", "PushToTalk Room")
-            put("room_alias", "#pushtotalk:10.100.10.162")
+//            put("room_alias", "#pushtotalk:10.100.10.162")
+            put("room_alias", "#pushtotalk:eoc.atlascrisis.com")
             put("prio", "high")
             put("content", JSONObject().apply {
                 put("msgtype", "m.audio")

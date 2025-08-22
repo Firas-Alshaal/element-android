@@ -304,6 +304,8 @@ internal abstract class SessionModule {
                 uri = "http://10.100.10.162:8008"
             } else if (uri == "http://2.50.159.120:8008") {
                 uri = "http://2.50.159.120:8008"
+            }else if (uri == "https://eoc.atlascrisis.com/Matrix") {
+                uri = "https://eoc.atlascrisis.com/Matrix"
             }
             return retrofitFactory
                     .create(okHttpClient, uri)
