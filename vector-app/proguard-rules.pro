@@ -96,7 +96,17 @@
 -dontwarn org.jspecify.annotations.NullMarked
 
 # --- Fix for R8 missing java.lang.reflect.AnnotatedType ---
--keep class java.lang.reflect.AnnotatedType { *; }
--keepclassmembers class * {
-    java.lang.reflect.AnnotatedType[] *;
-}
+# Generated automatically by Android Gradle plugin
+-dontwarn java.lang.reflect.AnnotatedType
+
+# --- PTT (Push-to-Talk) Related Classes ---
+# Keep PTT classes to prevent R8 from breaking functionality
+-keep class im.vector.app.features.home.room.detail.composer.PttWebSocketManager** { *; }
+-keep class im.vector.app.features.home.room.detail.composer.PttReceiverSocketService** { *; }
+-keep class im.vector.app.features.home.room.detail.composer.PttMatrixSyncHandler** { *; }
+-keep class im.vector.app.features.home.room.detail.composer.PttConnectionManager** { *; }
+-keep class im.vector.app.features.home.room.detail.composer.MatrixPttSender** { *; }
+-keep class im.vector.app.features.home.room.detail.composer.PttTcpSender** { *; }
+-keep class im.vector.app.features.home.room.detail.composer.MatrixPttReceiver** { *; }
+-keep class im.vector.app.features.home.room.detail.composer.PttTcpReceiverService** { *; }
+-keep class im.vector.app.features.home.room.detail.composer.PttCoordinator** { *; }
