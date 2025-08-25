@@ -12,6 +12,7 @@ import android.content.Context
 import android.content.Intent
 import android.media.AudioAttributes
 import android.media.AudioDeviceInfo
+import android.media.AudioFocusRequest
 import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioTrack
@@ -22,12 +23,16 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import org.matrix.android.sdk.api.session.Session
 import org.matrix.android.sdk.api.session.getRoom
 import timber.log.Timber
 import java.io.BufferedInputStream
 import java.net.Socket
+import kotlin.math.max
 
 class PttTcpReceiverService : Service() {
 
@@ -226,8 +231,6 @@ class PttTcpReceiverService : Service() {
         }
     }
 
-
-
     override fun onDestroy() {
         super.onDestroy()
         isRunning = false
@@ -238,12 +241,27 @@ class PttTcpReceiverService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 }
 
+private fun elevateAudioThreadPriority() {
+    try {
+        android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_AUDIO)
+    } catch (_: Exception) {
+    }
+}
+
+data class PttFrame(
+        val seq: Long,
+        val ts: Long,
+        val frameMs: Int,
+        val pcm: ByteArray
+)
+
 class MatrixPttReceiver(
         private val context: Context,
         private val session: Session,
         private val roomId: String
 ) {
-    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private val frameChannel = Channel<PttFrame>(capacity = 64)
+    private var scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var audioTrack: AudioTrack? = null
     private var isRunning = false
     private var toDeviceListener: org.matrix.android.sdk.api.session.LiveEventListener? = null
@@ -271,10 +289,24 @@ class MatrixPttReceiver(
             return
         }
 
+        if (!scope.isActive) {
+            scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        }
+
         Timber.d("Starting MatrixPttReceiver (to-device) for room: $roomId")
+
+
+        while (true) {
+            val r = frameChannel.tryReceive()
+            if (r.isSuccess) continue else break
+        }
 
         try {
             setupToDeviceListener()
+
+            scope.launch {
+                runPlaybackLoop()
+            }
         } catch (e: Exception) {
             Timber.e(e, "Failed to setup to-device listener")
             synchronized(this) {
@@ -313,46 +345,64 @@ class MatrixPttReceiver(
                     return
                 }
 
-                if (event.type == "m.ptt.audio") {
-                    Timber.d("Received PTT audio to-device event!")
-                    val content = event.content ?: run {
-                        Timber.w("Event content is null")
-                        return
-                    }
+                /* if (event.type == "m.ptt.audio") {
+                     Timber.d("Received PTT audio to-device event!")
+                     val content = event.content ?: run {
+                         Timber.w("Event content is null")
+                         return
+                     }
 
+                     val eventRoomId = content["room_id"] as? String
+                     val senderId = content["sender_id"] as? String
+                     Timber.d("Event details: roomId=$eventRoomId, senderId=$senderId, myUserId=${session.myUserId}")
+
+                     // Filter events for correct room and ignore my own messages
+                     if (eventRoomId == roomId && senderId != session.myUserId) {
+                         val audioData = content["audio_data"] as? String
+                         val encoding = content["encoding"] as? String
+
+                         Timber.d("Audio data length: ${audioData?.length}, encoding: $encoding")
+
+                         if (audioData != null && encoding == "pcm_16bit") {
+                             try {
+                                 val pcm = Base64.decode(audioData, Base64.NO_WRAP)
+                                 Timber.d("Playing PTT audio chunk (${pcm.size} bytes)")
+
+                                 // Simple solution: use simple function directly
+                                 playPcmData(pcm)
+                             } catch (e: Exception) {
+                                 Timber.e(e, "Failed to decode/play PTT to-device chunk")
+                             }
+                         } else {
+                             Timber.w("Invalid audio data or encoding: audioData=${audioData?.length}, encoding=$encoding")
+                         }
+                     } else {
+                         Timber.d("Event filtered out: room match=${eventRoomId == roomId}, sender match=${senderId != session.myUserId}")
+                     }
+                 }*/
+                if (event.type == "m.ptt.audio") {
+                    val content = event.content ?: return
                     val eventRoomId = content["room_id"] as? String
                     val senderId = content["sender_id"] as? String
-                    Timber.d("Event details: roomId=$eventRoomId, senderId=$senderId, myUserId=${session.myUserId}")
-
-                    // Filter events for correct room and ignore my own messages
                     if (eventRoomId == roomId && senderId != session.myUserId) {
-                        val audioData = content["audio_data"] as? String
                         val encoding = content["encoding"] as? String
+                        val base64 = content["audio_data"] as? String ?: return
+                        val seq = (content["seq"] as? Number)?.toLong() ?: 0L
+                        val ts = (content["timestamp"] as? Number)?.toLong() ?: System.currentTimeMillis()
+                        val frameMs = (content["frame_ms"] as? Number)?.toInt() ?: 200
 
-                        Timber.d("Audio data length: ${audioData?.length}, encoding: $encoding")
-
-                        if (audioData != null && encoding == "pcm_16bit") {
-                            try {
-                                val pcm = Base64.decode(audioData, Base64.NO_WRAP)
-                                Timber.d("Playing PTT audio chunk (${pcm.size} bytes)")
-                                
-                                // Simple solution: use simple function directly
-                                playPcmData(pcm)
-                            } catch (e: Exception) {
-                                Timber.e(e, "Failed to decode/play PTT to-device chunk")
-                            }
-                        } else {
-                            Timber.w("Invalid audio data or encoding: audioData=${audioData?.length}, encoding=$encoding")
+                        if (encoding == "pcm_16bit") {
+                            val pcm = Base64.decode(base64, Base64.NO_WRAP)
+                            // ادفع إلى القناة (عدم الحجب)
+                            frameChannel.trySend(PttFrame(seq, ts, frameMs, pcm))
                         }
-                    } else {
-                        Timber.d("Event filtered out: room match=${eventRoomId == roomId}, sender match=${senderId != session.myUserId}")
                     }
                 } else {
                     Timber.d("Ignoring non-PTT event type: ${event.type}")
                 }
             }
         }
-        
+
         // Register listener
         toDeviceListener?.let { listener ->
             Timber.d("Registering to-device listener with Matrix SDK")
@@ -363,7 +413,170 @@ class MatrixPttReceiver(
         }
     }
 
+    private suspend fun runPlaybackLoop() {
+        elevateAudioThreadPriority()
 
+        val sampleRate = 16000
+        val min = AudioTrack.getMinBufferSize(
+                sampleRate,
+                AudioFormat.CHANNEL_OUT_MONO,
+                AudioFormat.ENCODING_PCM_16BIT
+        )
+        // بوفر تشغيل أوسع (~300ms) بدل 2048
+        val trackBuf = max(min, 320 /*10ms*/ * 30)
+
+        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        audioManager.mode = AudioManager.MODE_NORMAL               // لا نستخدم مسار المكالمات هنا
+        @Suppress("DEPRECATION")
+        audioManager.isSpeakerphoneOn = true
+
+// ارفع مسار الموسيقى لأنه يتوافق مع USAGE_MEDIA
+        val maxVolM = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+        audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, maxVolM, 0)
+
+// فوكس صوت (اختياري لكنه مفيد)
+        val focusAttrs = AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_MEDIA)                 // MEDIA بدل VOICE_COMMUNICATION
+                .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                .build()
+        val focusRequest = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
+                    .setAudioAttributes(focusAttrs)
+                    .setOnAudioFocusChangeListener { }
+                    .build()
+        } else null
+        val focusGranted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            audioManager.requestAudioFocus(focusRequest!!)
+        } else {
+            @Suppress("DEPRECATION")
+            audioManager.requestAudioFocus(null, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
+        }
+
+        if (focusGranted != AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
+            Timber.w("⚠️ Audio focus not granted")
+        }
+
+// 2) أنشئ AudioTrack بمسار MEDIA
+        val track = AudioTrack.Builder()
+                .setAudioAttributes(
+                        AudioAttributes.Builder()
+                                .setUsage(AudioAttributes.USAGE_MEDIA)         // هنا التبديل المهم
+                                .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                                .build()
+                )
+                .setAudioFormat(
+                        AudioFormat.Builder()
+                                .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                                .setSampleRate(sampleRate)
+                                .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                                .build()
+                )
+                .setBufferSizeInBytes(trackBuf)
+                .setTransferMode(AudioTrack.MODE_STREAM)
+                .build()
+
+        audioTrack = track
+
+// 3) LoudnessEnhancer (لو متاح)
+        val loudness = try {
+            android.media.audiofx.LoudnessEnhancer(track.audioSessionId).apply {
+                setTargetGain(1500) // ≈ +15 dB
+                enabled = true
+            }
+        } catch (e: Exception) {
+            Timber.w(e, "LoudnessEnhancer not available")
+            null
+        }
+
+// 4) ضبط مستوى AudioTrack للأقصى (احتياطي)
+        try {
+            track.setVolume(1.0f)
+            @Suppress("DEPRECATION")
+            track.setStereoVolume(1.0f, 1.0f)
+        } catch (e: Exception) {
+            Timber.w(e, "Failed to set track volume")
+        }
+
+        // Jitter buffer: نرتب حسب seq
+        val pq = java.util.PriorityQueue<PttFrame> { a, b ->
+            when {
+                a.seq != b.seq -> a.seq.compareTo(b.seq)
+                else -> a.ts.compareTo(b.ts) // tie-breaker
+            }
+        }
+        var started = false
+        var bufferedMs = 0
+        val prebufferMs = 180   // انتظر ~180ms قبل البدء
+        val maxBufferedMs = 400 // لو زاد التراكم، نسقط أقدم إطار
+
+        Timber.d("🔁 Playback loop started (prebuffer=${prebufferMs}ms, trackBuf=$trackBuf)")
+
+        try {
+            audioTrack?.setVolume(1.0f) // API >= 21
+            @Suppress("DEPRECATION")
+            audioTrack?.setStereoVolume(1.0f, 1.0f) // للأجهزة الأقدم
+        } catch (e: Exception) {
+            Timber.w(e, "⚠️ Failed to force max volume")
+        }
+
+        while (isRunning) {
+            // استلم إطار أو انتظر قليلاً لتتيح التشغيل
+            val frame = withTimeoutOrNull(30L) { frameChannel.receive() }
+            if (frame != null) {
+                pq.add(frame)
+                bufferedMs += frame.frameMs
+            }
+
+            // ابدأ التشغيل بعد التراكم المطلوب
+            if (!started && bufferedMs >= prebufferMs && pq.isNotEmpty()) {
+                try {
+                    track.play()
+                } catch (_: Exception) {
+                }
+                started = true
+                Timber.d("▶️ Playback started after prebuffer ${bufferedMs}ms")
+            }
+
+            // لو تراكم كبير، اسقط أقدم إطار لتقليل التأخير التراكمي
+            while (bufferedMs > maxBufferedMs) {
+                val dropped = pq.poll() ?: break
+                bufferedMs -= dropped.frameMs
+                Timber.d("⏩ Dropped frame seq=${dropped.seq} to reduce latency (bufferedMs=$bufferedMs)")
+            }
+
+            // شغّل بالترتيب طالما عندنا بيانات وبدأنا التشغيل
+            while (started) {
+                val next = pq.poll() ?: break
+                bufferedMs -= next.frameMs
+
+                var off = 0
+                val data = next.pcm
+                while (off < data.size) {
+                    val w = track.write(data, off, data.size - off)
+                    if (w <= 0) break
+                    off += w
+                }
+            }
+        }
+
+        // تنظيف نهائي
+        try {
+            track.stop()
+        } catch (_: Exception) {
+        }
+        try {
+            track.release()
+        } catch (_: Exception) {
+        }
+        runCatching { loudness?.enabled = false }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            focusRequest?.let { audioManager.abandonAudioFocusRequest(it) }
+        } else {
+            @Suppress("DEPRECATION")
+            audioManager.abandonAudioFocus(null)
+        }
+        Timber.d("⏹️ Playback loop ended")
+    }
 
     private fun playPcmDataInternal(data: ByteArray) {
         Timber.d("playPcmDataInternal called with ${data.size} bytes")
@@ -517,10 +730,9 @@ class MatrixPttReceiver(
             if (offset > 0) {
                 Timber.d("✅ Successfully wrote $offset bytes to AudioTrack")
             }
-
         } catch (e: Exception) {
             Timber.e(e, "💥 Critical error in playPcmDataInternal")
-            
+
             // 🚨 تنظيف في حالة الخطأ
             try {
                 cleanupAudioTrack()
@@ -535,7 +747,7 @@ class MatrixPttReceiver(
      */
     private fun cleanupAudioTrack() {
         Timber.d("🧹 Starting safe AudioTrack cleanup")
-        
+
         try {
             // 🚨 احفظ reference مؤقت لتجنب null pointer
             val trackToClean = audioTrack
@@ -573,20 +785,19 @@ class MatrixPttReceiver(
             } catch (e: Exception) {
                 Timber.w(e, "⚠️ Error resetting AudioManager")
             }
-
         } catch (e: Exception) {
             Timber.e(e, "❌ Critical error during AudioTrack cleanup")
             // تأكد من null حتى في حالة الخطأ الشديد
             audioTrack = null
         }
-        
+
         Timber.d("🧹 AudioTrack cleanup completed")
     }
 
     // 🚨 دالة محمية لتشغيل الصوت مع حماية شاملة
     private fun playPcmData(data: ByteArray) {
         Timber.d("🔊 playPcmData called with ${data.size} bytes")
-        
+
         // 🚨 فحص شامل قبل البدء
         try {
             // فحص حالة الـ receiver
@@ -616,7 +827,7 @@ class MatrixPttReceiver(
             }
         } catch (e: Exception) {
             Timber.e(e, "💥 Critical error in playPcmData")
-            
+
             // 🚨 تنظيف طارئ مع حماية
             try {
                 cleanupAudioTrack()
@@ -626,11 +837,9 @@ class MatrixPttReceiver(
         }
     }
 
-
-
     fun stop() {
         Timber.d("🛑 Stopping MatrixPttReceiver...")
-        
+
         // 🚨 إيقاف المعالجة أولاً
         isRunning = false
 

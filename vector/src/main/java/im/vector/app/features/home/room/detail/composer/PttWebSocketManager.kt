@@ -22,8 +22,10 @@ import org.matrix.android.sdk.api.session.Session
 import org.matrix.android.sdk.api.session.getRoom
 import timber.log.Timber
 import java.io.BufferedOutputStream
+import java.io.ByteArrayOutputStream
 import java.net.ServerSocket
 import java.net.Socket
+import kotlin.math.max
 
 class PttManager(
         private val context: Context,
@@ -235,11 +237,18 @@ class MatrixPttSender(
             }
 
             audioRecord = AudioRecord(
-                    MediaRecorder.AudioSource.MIC,
+                    MediaRecorder.AudioSource.VOICE_COMMUNICATION,
                     SAMPLE_RATE,
                     AudioFormat.CHANNEL_IN_MONO,
                     AudioFormat.ENCODING_PCM_16BIT,
-                    BUFFER_SIZE
+                    max(
+                            AudioRecord.getMinBufferSize(
+                                    SAMPLE_RATE,
+                                    AudioFormat.CHANNEL_IN_MONO,
+                                    AudioFormat.ENCODING_PCM_16BIT
+                            ),
+                            320 /*10ms*/ * 12 // ~120ms record buffer
+                    )
             )
 
             if (audioRecord?.state != AudioRecord.STATE_INITIALIZED) {
@@ -247,50 +256,87 @@ class MatrixPttSender(
                 return@launch
             }
 
-            val buffer = ByteArray(BUFFER_SIZE)
+//            val buffer = ByteArray(BUFFER_SIZE)
+
+            val frameMs = 200 // جرّب 200–300
+            val bytesPerMs = (SAMPLE_RATE /*16k*/ * 2 /*PCM16 mono*/)/1000 // = 32 B/ms
+            val frameBytesTarget = frameMs * bytesPerMs // ≈ 6400B عند 200ms
+
+            val agg = ByteArrayOutputStream(frameBytesTarget * 2)
+            var seq = 0L
             val startTime = System.currentTimeMillis()
             var packetCount = 0
+
 
             Timber.d("🎙️ Starting Matrix PTT streaming via to-device messages...")
 
             audioRecord?.startRecording()
 
             while (isStreaming && (System.currentTimeMillis() - startTime) < MAX_RECORDING_TIME_MS) {
-                val read = audioRecord?.read(buffer, 0, buffer.size) ?: 0
+                // اقرأ على دفعات صغيرة (مثلاً 10–20ms) ثم اجمع إلى 200–300ms
+                val tmp = ByteArray(320 * 2) // ~20ms = 640B
+                val read = audioRecord?.read(tmp, 0, tmp.size) ?: 0
                 if (read > 0) {
-                    val chunk = buffer.copyOf(read)
-                    val base64 = Base64.encodeToString(chunk, Base64.NO_WRAP)
-                    try {
-                        // Direct to-device messaging without timeline pollution
-                        val targets = roomMembers.associate { member ->
-                            member.userId to listOf("*") // All devices for user
-                        }
+                    agg.write(tmp, 0, read)
+                    // أرسل فقط عندما يصل التجمّع إلى الإطار المستهدف
+                    if (agg.size() >= frameBytesTarget) {
+                        val payload = agg.toByteArray()
+                        agg.reset()
+                        seq++
 
-                        session.toDeviceService().sendToDevice(
-                                eventType = "m.ptt.audio",
-                                targets = targets,
-                                content = mapOf(
-                                        "audio_data" to base64,
-                                        "room_id" to roomId,
-                                        "timestamp" to System.currentTimeMillis(),
-                                        "sample_rate" to SAMPLE_RATE,
-                                        "encoding" to "pcm_16bit",
-                                        "sender_id" to session.myUserId
-                                )
-                        )
-                        packetCount++
-                        if (packetCount <= 3 || packetCount % 20 == 0) {
-                            Timber.d("📤 Sent PTT to-device chunk #$packetCount (${read} bytes) to ${roomMembers.size} members")
+                        val base64 = Base64.encodeToString(payload, Base64.NO_WRAP)
+
+                        try {
+                            val targets = roomMembers.associate { member -> member.userId to listOf("*") }
+                            session.toDeviceService().sendToDevice(
+                                    eventType = "m.ptt.audio",
+                                    targets = targets,
+                                    content = mapOf(
+                                            "room_id" to roomId,
+                                            "sender_id" to session.myUserId,
+                                            "timestamp" to System.currentTimeMillis(),
+                                            "seq" to seq,
+                                            "sample_rate" to SAMPLE_RATE,
+                                            "encoding" to "pcm_16bit",
+                                            "frame_ms" to frameMs,
+                                            "audio_data" to base64
+                                    )
+                            )
+                            packetCount++
+                            if (packetCount <= 3 || packetCount % 10 == 0) {
+                                Timber.d("📤 Sent PTT frame #$packetCount (seq=$seq, ${payload.size}B ~${frameMs}ms)")
+                            }
+                            // تحكم بسيط بالمعدل (اختياري): استهدف ~5fps
+                            // delay(0) يكفي غالبًا لأن القراءة نفسها تضبط المعدل.
+                        } catch (e: Exception) {
+                            Timber.e(e, "❌ Failed to send PTT to-device frame")
                         }
-                    } catch (e: Exception) {
-                        Timber.e(e, "❌ Failed to send PTT to-device chunk")
                     }
-                } else if (read == 0) {
-                    // No audio data, continue immediately
-                } else {
+                } else if (read < 0) {
                     Timber.w("AudioRecord read error: $read")
                     break
                 }
+            }
+
+            if (agg.size() > 0) {
+                val payload = agg.toByteArray()
+                seq++
+                val base64 = Base64.encodeToString(payload, Base64.NO_WRAP)
+                val targets = roomMembers.associate { member -> member.userId to listOf("*") }
+                session.toDeviceService().sendToDevice(
+                        eventType = "m.ptt.audio",
+                        targets = targets,
+                        content = mapOf(
+                                "room_id" to roomId,
+                                "sender_id" to session.myUserId,
+                                "timestamp" to System.currentTimeMillis(),
+                                "seq" to seq,
+                                "sample_rate" to SAMPLE_RATE,
+                                "encoding" to "pcm_16bit",
+                                "frame_ms" to frameMs,
+                                "audio_data" to base64
+                        )
+                )
             }
 
             Timber.d("Matrix PTT streaming ended: $packetCount chunks sent via to-device")
