@@ -61,8 +61,8 @@ class CallKeepAliveService : Service() {
     private fun startForeground() {
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Ready for calls")
-            .setContentText("Element is ready to receive calls")
-            .setSmallIcon(R.drawable.ic_call_answer)
+            .setContentText("Muraijeb is ready to receive calls")
+            .setSmallIcon(R.drawable.ic_notification)
             .setPriority(NotificationCompat.PRIORITY_MIN)
             .setOngoing(true)
             .setShowWhen(false)

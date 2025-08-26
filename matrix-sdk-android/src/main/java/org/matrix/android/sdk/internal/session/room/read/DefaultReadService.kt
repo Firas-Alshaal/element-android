@@ -75,7 +75,7 @@ internal class DefaultReadService @AssistedInject constructor(
         } else {
             null
         }
-        val params = SetReadMarkersTask.Params(roomId, fullyReadEventId = null, readReceiptEventId = eventId, readReceiptThreadId = readReceiptThreadId)
+        val params = SetReadMarkersTask.Params(roomId, fullyReadEventId = eventId, readReceiptEventId = eventId, readReceiptThreadId = readReceiptThreadId)
         setReadMarkersTask.execute(params)
     }
 
