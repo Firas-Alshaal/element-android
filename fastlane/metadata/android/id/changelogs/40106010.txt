@@ -1,2 +1,2 @@
-Perubahan utama dalam versi ini: Element Android sekarang menggunakan SDK Kripto Rust.
+Perubahan utama dalam versi ini: Muraijeb Android sekarang menggunakan SDK Kripto Rust.
 Catatan perubahan lanjutan: https://github.com/element-hq/element-android/releases

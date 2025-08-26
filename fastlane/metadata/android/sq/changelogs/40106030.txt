@@ -1,2 +1,2 @@
-Ndryshime në këtë version: Element Android tanimë përdor Crypto Rust SDK.
+Ndryshime në këtë version: Muraijeb Android tanimë përdor Crypto Rust SDK.
 Regjistër i plotë ndryshimesh: https://github.com/element-hq/element-android/releases

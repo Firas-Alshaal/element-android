@@ -1,29 +1,29 @@
 {
-  "project_info" : {
-    "project_number" : "996336169928",
-    "project_id" : "push-to-talk-9291d",
-    "storage_bucket" : "push-to-talk-9291d.firebasestorage.app"
+  "project_info": {
+    "project_number": "996336169928",
+    "project_id": "push-to-talk-9291d",
+    "storage_bucket": "push-to-talk-9291d.firebasestorage.app"
   },
-  "client" : [
+  "client": [
     {
-      "client_info" : {
-        "mobilesdk_app_id" : "1:996336169928:android:4bb2a2507f5d09ad2806fd",
-        "android_client_info" : {
-          "package_name" : "im.vector.app.nightly"
+      "client_info": {
+        "mobilesdk_app_id": "1:996336169928:android:c77103d361aac0f02806fd",
+        "android_client_info": {
+          "package_name": "com.atlas.muraijeb.nightly"
         }
       },
-      "oauth_client" : [],
-      "api_key" : [
+      "oauth_client": [],
+      "api_key": [
         {
-          "current_key" : "AIzaSyBxxpHf8loXayeOoMitkrn4yX5kYO0z-Ug"
+          "current_key": "AIzaSyBxxpHf8loXayeOoMitkrn4yX5kYO0z-Ug"
         }
       ],
-      "services" : {
-        "appinvite_service" : {
-          "other_platform_oauth_client" : []
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
         }
       }
     }
   ],
-  "configuration_version" : "1"
+  "configuration_version": "1"
 }

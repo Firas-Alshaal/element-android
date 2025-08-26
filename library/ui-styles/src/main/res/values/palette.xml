@@ -2,7 +2,7 @@
 <resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="UnusedResources">
 
     <!--
-     Define all the colors used across the Element Android project
+     Define all the colors used across the Muraijeb Android project
      Source: https://www.figma.com/file/X4XTH9iS2KGJ2wFKDqkyed/Compound?node-id=1338%3A17947
      Some colors are not used, but we want the palette to be complete so we ignore the lint error
      UnusedResources for all the resources in this file

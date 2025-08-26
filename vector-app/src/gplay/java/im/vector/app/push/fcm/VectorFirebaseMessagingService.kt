@@ -11,11 +11,8 @@ package im.vector.app.push.fcm
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.media.RingtoneManager
-import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
-import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ProcessLifecycleOwner
@@ -179,7 +176,7 @@ class VectorFirebaseMessagingService : FirebaseMessagingService() {
             val notification = NotificationCompat.Builder(this, "CALL_CHANNEL_UNIVERSAL")
                 .setContentTitle(callerName)
                 .setContentText("Incoming call")
-                .setSmallIcon(R.drawable.ic_call_answer)
+                .setSmallIcon(R.drawable.ic_notification)
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .setCategory(NotificationCompat.CATEGORY_CALL)
                 .setAutoCancel(false)
@@ -216,7 +213,7 @@ class VectorFirebaseMessagingService : FirebaseMessagingService() {
                 val simpleNotification = NotificationCompat.Builder(this, "DEFAULT_NOISY_NOTIFICATION_CHANNEL_ID")
                     .setContentTitle("Incoming Call")
                     .setContentText("You have an incoming call")
-                    .setSmallIcon(R.drawable.ic_call_answer)
+                    .setSmallIcon(R.drawable.ic_notification)
                     .setPriority(NotificationCompat.PRIORITY_HIGH)
                     .build()
                 

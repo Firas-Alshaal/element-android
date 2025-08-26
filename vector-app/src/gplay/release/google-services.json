@@ -7,9 +7,9 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:996336169928:android:56b0a772fac62fbb2806fd",
+        "mobilesdk_app_id": "1:996336169928:android:28d75fcc9dd3933e2806fd",
         "android_client_info": {
-          "package_name": "im.vector.app"
+          "package_name": "com.atlas.muraijeb"
         }
       },
       "oauth_client": [],

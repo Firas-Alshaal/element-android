@@ -461,7 +461,7 @@
     <string name="home_layout_preferences_sort_name">A - Z</string>
 
     <string name="labs_enable_new_app_layout_title">Enable new layout</string>
-    <string name="labs_enable_new_app_layout_summary">A simplified Element with optional tabs</string>
+    <string name="labs_enable_new_app_layout_summary">A simplified Muraijeb with optional tabs</string>
 
     <string name="labs_enable_deferred_dm_title">Enable deferred DMs</string>
     <string name="labs_enable_deferred_dm_summary">Create DM only on first message</string>
@@ -2942,7 +2942,7 @@
     <string name="call_slide_to_end_conference">Slide to end the call</string>
 
     <string name="call_unsupported">Unsupported call</string>
-    <string name="call_unsupported_matrix_rtc_call">Unsupported call. The new Element X app is needed to join this call.</string>
+    <string name="call_unsupported_matrix_rtc_call">Unsupported call. The new Muraijeb X app is needed to join this call.</string>
 
     <string name="re_authentication_activity_title">Re-Authentication Needed</string>
     <!-- Note to translators: the translation MUST contain the string "${app_name}", which will be replaced by the application name -->
@@ -3383,8 +3383,8 @@
     </plurals>
 
     <!-- Element Call Widget -->
-    <string name="labs_enable_element_call_permission_shortcuts">Enable Element Call permission shortcuts</string>
-    <string name="labs_enable_element_call_permission_shortcuts_summary">Auto-approve Element Call widgets and grant camera / mic access</string>
+    <string name="labs_enable_element_call_permission_shortcuts">Enable Muraijeb Call permission shortcuts</string>
+    <string name="labs_enable_element_call_permission_shortcuts_summary">Auto-approve Muraijeb Call widgets and grant camera / mic access</string>
 
     <!-- Device Manager -->
     <string name="device_manager_sessions_other_title">Other sessions</string>
