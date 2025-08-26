@@ -87,11 +87,21 @@ class VectorPushHandler @Inject constructor(
         }
 
         mUIHandler.post {
-            if (ProcessLifecycleOwner.get().lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
-                // we are in foreground, let the sync do the things?
-                Timber.tag(loggerTag.value).d("PUSH received in a foreground state, ignore")
-            } else {
-                coroutineScope.launch(Dispatchers.IO) { handleInternal(pushData) }
+            val isInForeground = ProcessLifecycleOwner.get().lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
+            
+            // Always check for call events in background thread
+            coroutineScope.launch(Dispatchers.IO) {
+                val isCallEvent = isCallEvent(pushData)
+                
+                if (isCallEvent) {
+                    Timber.tag(loggerTag.value).d("Processing call event in ${if (isInForeground) "foreground" else "background"}")
+                    handleInternal(pushData)
+                } else if (isInForeground) {
+                    // we are in foreground, let the sync do the things for non-call events
+                    Timber.tag(loggerTag.value).d("PUSH received in a foreground state, ignore")
+                } else {
+                    handleInternal(pushData)
+                }
             }
         }
     }
@@ -134,10 +144,8 @@ class VectorPushHandler @Inject constructor(
         pushData.roomId ?: return
         pushData.eventId ?: return
 
-        if (wifiDetector.isConnectedToWifi().not()) {
-            Timber.tag(loggerTag.value).d("No WiFi network, do not get Event")
-            return
-        }
+        // Removed WiFi check to allow calls on mobile data
+        Timber.tag(loggerTag.value).d("Fast lane: allowing on any network connection")
 
         Timber.tag(loggerTag.value).d("Fast lane: start request")
         val event = tryOrNull { session.eventService().getEvent(pushData.roomId, pushData.eventId) } ?: return
@@ -171,5 +179,23 @@ class VectorPushHandler @Inject constructor(
             }
         }
         return false
+    }
+
+    /**
+     * Check if this push data is for a call event
+     */
+    private suspend fun isCallEvent(pushData: PushData): Boolean {
+        if (pushData.eventId == null || pushData.roomId == null) return false
+        
+        return try {
+            val session = activeSessionHolder.getSafeActiveSession() ?: return false
+            val event = tryOrNull { session.eventService().getEvent(pushData.roomId, pushData.eventId) }
+            
+            val eventType = event?.getClearType()
+            eventType == "m.call.invite" || eventType == "m.call.candidates" || eventType == "m.call.answer"
+        } catch (e: Exception) {
+            Timber.tag(loggerTag.value).e(e, "Failed to check if event is call event")
+            false
+        }
     }
 }

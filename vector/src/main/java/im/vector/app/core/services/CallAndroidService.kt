@@ -107,8 +107,19 @@ class CallAndroidService : VectorAndroidService() {
             ACTION_INCOMING_RINGING_CALL -> {
                 mediaSession?.isActive = true
                 val fromBg = intent.getBooleanExtra(EXTRA_IS_IN_BG, false)
-                callRingPlayerIncoming?.start(fromBg)
-                displayIncomingCallNotification(intent)
+                val callId = intent.getStringExtra(EXTRA_CALL_ID)
+                val roomId = intent.getStringExtra("EXTRA_ROOM_ID")
+                val callerName = intent.getStringExtra("EXTRA_CALLER_NAME")
+                
+                // Handle direct FCM call (app might be killed)
+                if (roomId != null && callerName != null) {
+                    Timber.v("Handling direct FCM call: $callerName in room $roomId")
+                    displayDirectCallNotification(callId ?: "", callerName, roomId, fromBg)
+                } else {
+                    // Handle normal call flow
+                    callRingPlayerIncoming?.start(fromBg)
+                    displayIncomingCallNotification(intent)
+                }
             }
             ACTION_OUTGOING_RINGING_CALL -> {
                 mediaSession?.isActive = true
@@ -371,6 +382,77 @@ class CallAndroidService : VectorAndroidService() {
                         putExtra(EXTRA_END_CALL_REJECTED, rejected)
                     }
             context.startService(intent)
+        }
+    }
+
+    /**
+     * Display incoming call notification directly from FCM (when app is killed)
+     */
+    private fun displayDirectCallNotification(callId: String, callerName: String, roomId: String, fromBg: Boolean) {
+        try {
+            Timber.v("displayDirectCallNotification for $callerName")
+            
+            // Start ringing immediately
+            callRingPlayerIncoming?.start(fromBg)
+            
+            // Create high-priority call notification
+            val notification = notificationUtils.buildDirectCallNotification(
+                callId = callId,
+                callerName = callerName,
+                roomId = roomId,
+                isVideoCall = false, // Default to audio, will be updated when Matrix sync completes
+                fromBg = true
+            )
+            
+            // Start foreground service with call notification
+            startForegroundCompat(callId.hashCode(), notification)
+            
+            // Show in-app alert if app becomes active
+            val incomingCallAlert = createDirectCallAlert(callId, callerName, roomId)
+            alertManager.postVectorAlert(incomingCallAlert)
+            
+            Timber.v("Direct call notification displayed successfully")
+            
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to display direct call notification")
+        }
+    }
+
+    /**
+     * Create alert for direct FCM call
+     */
+    private fun createDirectCallAlert(callId: String, @Suppress("UNUSED_PARAMETER") callerName: String, roomId: String): IncomingCallAlert {
+        return IncomingCallAlert(
+            callId,
+            shouldBeDisplayedIn = { true } // Always show when app becomes active
+        ).apply {
+            viewBinder = IncomingCallAlert.ViewBinder(
+                matrixItem = null, // Will be updated when Matrix sync completes
+                avatarRenderer = avatarRenderer,
+                isVideoCall = false, // Default to audio
+                onAccept = { 
+                    // Launch call screen to handle accept
+                    val intent = Intent(this@CallAndroidService, im.vector.app.features.call.VectorCallActivity::class.java).apply {
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                        putExtra("EXTRA_CALL_ID", callId)
+                        putExtra("EXTRA_ROOM_ID", roomId)
+                        putExtra("EXTRA_MODE", "INCOMING_ACCEPT")
+                    }
+                    startActivity(intent)
+                },
+                onReject = { 
+                    // End call immediately
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                    callRingPlayerIncoming?.stop()
+                    stopSelf()
+                }
+            )
+            dismissedAction = Runnable {
+                // End call when dismissed
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                callRingPlayerIncoming?.stop()
+                stopSelf()
+            }
         }
     }
 

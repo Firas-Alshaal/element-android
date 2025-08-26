@@ -31,9 +31,11 @@
         <!-- Add tools:ignore="Instantiatable" for the error reported only by the CI :/ -->
         <service android:name="im.vector.app.push.fcm.VectorFirebaseMessagingService"
             android:exported="true"
+            android:enabled="true"
+            android:priority="1000"
             tools:replace="android:exported"
             tools:ignore="Instantiatable">
-            <intent-filter>
+            <intent-filter android:priority="1000">
                 <action android:name="com.google.firebase.MESSAGING_EVENT" />
             </intent-filter>
         </service>

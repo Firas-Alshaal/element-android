@@ -8,15 +8,21 @@
 package im.vector.app.push.fcm
 
 
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.RingtoneManager
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.ProcessLifecycleOwner
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import dagger.hilt.android.AndroidEntryPoint
+import im.vector.app.R
 import im.vector.app.core.di.ActiveSessionHolder
 import im.vector.app.core.pushers.FcmHelper
 import im.vector.app.core.pushers.PushParser
@@ -82,6 +88,15 @@ class VectorFirebaseMessagingService : FirebaseMessagingService() {
     override fun onMessageReceived(message: RemoteMessage) {
 
         Timber.d("🔥 onMessageReceived triggered")
+        
+        // Start keep-alive service to prevent app killing
+        try {
+            val keepAliveIntent = Intent(this, im.vector.app.core.services.CallKeepAliveService::class.java)
+            ContextCompat.startForegroundService(this, keepAliveIntent)
+            Timber.w("📱 Keep-alive service started from FCM")
+        } catch (e: Exception) {
+            Timber.e(e, "❌ CRITICAL: Failed to start keep-alive service from FCM")
+        }
 
         Timber.d("🔥 message.notification = ${message.notification}")
         Timber.d("🔥 message.data = ${message.data}")
@@ -93,43 +108,124 @@ class VectorFirebaseMessagingService : FirebaseMessagingService() {
         Timber.tag(loggerTag.value).d("New Firebase message: ${message.data}")
         Timber.d("✔ FCM data payload: ${message.data}")
 
-
-        // Handle normal Matrix push messages
-        try {
-            pushParser.parsePushDataFcm(message.data).let {
-                vectorPushHandler.handle(it)
-            }
-        } catch (failure: Throwable) {
-            Timber.e(failure, "Failed to handle incoming FCM message")
-        }
-
-
+        // **FIXED SOLUTION**: Handle PTT AND calls properly
+        
+        val isInBackground = !ProcessLifecycleOwner.get().lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
+        Timber.w("📱 FCM received in ${if (isInBackground) "BACKGROUND" else "FOREGROUND"}")
+        
+        // 1. Always check for PTT audio messages first (both foreground and background)
         val audioUrl = message.data["content_audio_url"]
         if (!audioUrl.isNullOrBlank()) {
-//            playAudio(audioUrl)
-            Timber.d("🔊 Received PTT audio URL: $audioUrl")
+            Timber.w("🎤 PTT message detected - playing audio")
             val intent = Intent(this, AudioPlaybackService::class.java).apply {
                 putExtra("audio_url", audioUrl)
             }
             ContextCompat.startForegroundService(this, intent)
-            return
         }
-
-        val body = message.notification?.body ?: message.data["body"] ?: "New message"
-        val builder = NotificationCompat.Builder(this, "DEFAULT_NOISY_NOTIFICATION_CHANNEL_ID")
-                .setSmallIcon(im.vector.app.R.drawable.ic_notification)
-                .setContentTitle("New Message")
-                .setContentText(body)
-                .setPriority(NotificationCompat.PRIORITY_HIGH)
-
-        if (ActivityCompat.checkSelfPermission(this, android.Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) {
-            with(NotificationManagerCompat.from(this)) {
-                notify(System.currentTimeMillis().toInt(), builder.build())
+        
+        // 2. If in background, ALWAYS show call notification (for all non-PTT messages)
+        if (isInBackground && audioUrl.isNullOrBlank()) {
+            Timber.w("📞 Background FCM - showing call notification")
+            showUniversalCallNotification(message.data)
+        }
+        
+        // 3. Always process normally for Matrix sync
+        try {
+            pushParser.parsePushDataFcm(message.data).let {
+                vectorPushHandler.handle(it)
             }
-        } else {
-            Timber.w("No POST_NOTIFICATIONS permission granted. Notification not shown.")
+        } catch (e: Exception) {
+            Timber.e(e, "Failed normal FCM processing")
         }
 
+    }
 
+    /**
+     * Show call notification for ALL FCM pushes (aggressive approach)
+     * This ensures calls work even when app is completely killed
+     */
+    private fun showUniversalCallNotification(data: Map<String, String>) {
+        try {
+            val eventId = data["event_id"] ?: System.currentTimeMillis().toString()
+            val roomId = data["room_id"] ?: "unknown_room"
+            val callerName = "Incoming Call"
+            
+            Timber.w("📞 UNIVERSAL: Showing call notification for FCM push")
+            Timber.w("📞 Data: eventId=$eventId, roomId=$roomId")
+            
+            // Log all FCM data for debugging
+            data.forEach { (k, v) ->
+                Timber.w("📞 FCM Data: $k = $v")
+            }
+            
+            // Create high-priority notification directly
+            val notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+            
+            // Create notification channel for calls
+            val channel = NotificationChannel(
+                "CALL_CHANNEL_UNIVERSAL",
+                "Incoming Calls",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Notifications for incoming calls"
+                setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE), null)
+                enableVibration(true)
+                vibrationPattern = longArrayOf(0, 1000, 500, 1000)
+                setShowBadge(true)
+            }
+            notificationManager.createNotificationChannel(channel)
+            
+            // Create notification
+            val notification = NotificationCompat.Builder(this, "CALL_CHANNEL_UNIVERSAL")
+                .setContentTitle(callerName)
+                .setContentText("Incoming call")
+                .setSmallIcon(R.drawable.ic_call_answer)
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setCategory(NotificationCompat.CATEGORY_CALL)
+                .setAutoCancel(false)
+                .setOngoing(true)
+                .setFullScreenIntent(null, true)
+                .build()
+            
+            // Show notification immediately
+            notificationManager.notify(eventId.hashCode(), notification)
+            
+            // ALSO start call service for ringing
+            val callIntent = Intent(this, im.vector.app.core.services.CallAndroidService::class.java).apply {
+                action = "im.vector.app.core.services.CallService.ACTION_INCOMING_RINGING_CALL"
+                putExtra("EXTRA_CALL_ID", eventId)
+                putExtra("EXTRA_IS_IN_BG", true)
+                putExtra("EXTRA_ROOM_ID", roomId)
+                putExtra("EXTRA_CALLER_NAME", callerName)
+            }
+            
+            try {
+                ContextCompat.startForegroundService(this, callIntent)
+                Timber.w("📞 Call service started successfully")
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to start call service, notification still shown")
+            }
+            
+            Timber.w("📞 ✅ UNIVERSAL call notification shown successfully for $callerName")
+            
+        } catch (e: Exception) {
+            Timber.e(e, "❌ CRITICAL: Failed to show universal call notification")
+            
+            // Last resort: Simple toast-like notification
+            try {
+                val simpleNotification = NotificationCompat.Builder(this, "DEFAULT_NOISY_NOTIFICATION_CHANNEL_ID")
+                    .setContentTitle("Incoming Call")
+                    .setContentText("You have an incoming call")
+                    .setSmallIcon(R.drawable.ic_call_answer)
+                    .setPriority(NotificationCompat.PRIORITY_HIGH)
+                    .build()
+                
+                val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+                nm.notify(999, simpleNotification)
+                Timber.w("📞 Fallback notification shown")
+            } catch (e2: Exception) {
+                Timber.e(e2, "Even fallback notification failed")
+            }
+        }
     }
 }

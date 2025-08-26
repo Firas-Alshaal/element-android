@@ -99,6 +99,18 @@
             android:exported="false"
             android:foregroundServiceType="mediaPlayback" />
 
+        <!-- Keep-alive service to ensure FCM works for calls -->
+        <service
+            android:name="im.vector.app.core.services.CallKeepAliveService"
+            android:enabled="true"
+            android:exported="false"
+            android:stopWithTask="false"
+            android:foregroundServiceType="specialUse">
+            <property 
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="call_keepalive" />
+        </service>
+
     </application>
 
 </manifest>

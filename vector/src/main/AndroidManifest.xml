@@ -60,6 +60,9 @@
     <!-- For MicrophoneAccessService -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
 
+    <!-- For CallKeepAliveService -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+
     <!-- Adding CAMERA permission prevents Chromebooks to see the application on the PlayStore -->
     <!-- Tell that the Camera is not mandatory to install the application -->
     <uses-feature

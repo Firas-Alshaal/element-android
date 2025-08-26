@@ -63,6 +63,10 @@ class GoogleFcmHelper @Inject constructor(
         // 'app should always check the device for a compatible Google Play services APK before accessing Google Play services features'
         if (checkPlayServices(context)) {
             try {
+                // Enable FCM since auto-init is disabled in manifest
+                FirebaseMessaging.getInstance().isAutoInitEnabled = true
+                Timber.d("📱 FCM auto-init enabled for token retrieval")
+                
                 FirebaseMessaging.getInstance().token
                         .addOnSuccessListener { token ->
                             storeFcmToken(token)
@@ -105,10 +109,22 @@ class GoogleFcmHelper @Inject constructor(
     }
 
     override fun onEnterForeground(activeSessionHolder: ActiveSessionHolder) {
-        // No op
+        // Ensure FCM is enabled when app comes to foreground
+        try {
+            Timber.d("📱 Ensuring FCM is enabled in foreground")
+            FirebaseMessaging.getInstance().isAutoInitEnabled = true
+        } catch (e: Throwable) {
+            Timber.e(e, "Failed to enable FCM in foreground")
+        }
     }
 
     override fun onEnterBackground(activeSessionHolder: ActiveSessionHolder) {
-        // No op
+        // Enable FCM when app goes to background to receive push notifications
+        try {
+            Timber.d("📱 Enabling FCM for background notifications")
+            FirebaseMessaging.getInstance().isAutoInitEnabled = true
+        } catch (e: Throwable) {
+            Timber.e(e, "Failed to enable FCM for background")
+        }
     }
 }

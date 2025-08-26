@@ -265,7 +265,7 @@
             app:lottie_rawRes="@raw/wave_animation" />
 
         <!-- Circular PTT Button -->
-        <Button
+        <!--<Button
             android:id="@+id/btn_record_original_outside"
             android:layout_width="56dp"
             android:layout_height="68dp"
@@ -276,7 +276,7 @@
             android:text="Push To Talk"
             android:textColor="@color/palette_white"
             android:textSize="8sp"
-            app:cornerRadius="100dp" />
+            app:cornerRadius="100dp" />-->
     </FrameLayout>
 
 

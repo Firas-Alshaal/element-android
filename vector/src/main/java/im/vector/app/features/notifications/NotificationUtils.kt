@@ -358,6 +358,92 @@ class NotificationUtils @Inject constructor(
         return builder.build()
     }
 
+    /**
+     * Build an incoming call notification for direct FCM calls (when app is killed)
+     */
+    fun buildDirectCallNotification(
+            callId: String,
+            callerName: String,
+            roomId: String,
+            isVideoCall: Boolean,
+            fromBg: Boolean
+    ): Notification {
+        val accentColor = ContextCompat.getColor(context, im.vector.lib.ui.styles.R.color.notification_accent_color)
+        val notificationChannel = if (fromBg) CALL_NOTIFICATION_CHANNEL_ID else SILENT_NOTIFICATION_CHANNEL_ID
+        val builder = NotificationCompat.Builder(context, notificationChannel)
+                .setContentTitle(ensureTitleNotEmpty(callerName))
+                .apply {
+                    if (isVideoCall) {
+                        setContentText(stringProvider.getString(CommonStrings.incoming_video_call))
+                        setSmallIcon(R.drawable.ic_call_answer_video)
+                    } else {
+                        setContentText(stringProvider.getString(CommonStrings.incoming_voice_call))
+                        setSmallIcon(R.drawable.ic_call_answer)
+                    }
+                }
+                .setCategory(NotificationCompat.CATEGORY_CALL)
+                .setColor(ThemeUtils.getColor(context, android.R.attr.colorPrimary))
+                .setLights(accentColor, 500, 500)
+                .setOngoing(true)
+
+        // Create intents for direct call handling
+        val contentIntent = Intent(context, im.vector.app.features.call.VectorCallActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra("EXTRA_CALL_ID", callId)
+            putExtra("EXTRA_ROOM_ID", roomId)
+            putExtra("EXTRA_MODE", "INCOMING_RINGING")
+            data = createIgnoredUri(callId)
+        }
+        val contentPendingIntent = PendingIntent.getActivity(
+                context,
+                clock.epochMillis().toInt(),
+                contentIntent,
+                PendingIntentCompat.FLAG_IMMUTABLE
+        )
+
+        // Answer call intent
+        val answerIntent = Intent(context, im.vector.app.features.call.VectorCallActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra("EXTRA_CALL_ID", callId)
+            putExtra("EXTRA_ROOM_ID", roomId)
+            putExtra("EXTRA_MODE", "INCOMING_ACCEPT")
+        }
+        val answerCallPendingIntent = PendingIntent.getActivity(
+                context,
+                clock.epochMillis().toInt(),
+                answerIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntentCompat.FLAG_IMMUTABLE
+        )
+
+        val rejectCallPendingIntent = buildRejectCallPendingIntent(callId)
+
+        builder.addAction(
+                NotificationCompat.Action(
+                        IconCompat.createWithResource(context, R.drawable.ic_call_hangup)
+                                .setTint(ThemeUtils.getColor(context, com.google.android.material.R.attr.colorError)),
+                        getActionText(CommonStrings.call_notification_reject, com.google.android.material.R.attr.colorError),
+                        rejectCallPendingIntent
+                )
+        )
+
+        builder.addAction(
+                NotificationCompat.Action(
+                        R.drawable.ic_call_answer,
+                        getActionText(CommonStrings.call_notification_answer, com.google.android.material.R.attr.colorPrimary),
+                        answerCallPendingIntent
+                )
+        )
+        
+        if (fromBg) {
+            // Compat: Display the incoming call notification on the lock screen
+            builder.priority = NotificationCompat.PRIORITY_HIGH
+            builder.setFullScreenIntent(contentPendingIntent, true)
+        }
+        
+        builder.setContentIntent(contentPendingIntent)
+        return builder.build()
+    }
+
     fun buildOutgoingRingingCallNotification(
             call: WebRtcCall,
             title: String

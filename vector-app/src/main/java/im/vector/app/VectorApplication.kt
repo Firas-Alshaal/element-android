@@ -256,6 +256,15 @@ class VectorApplication :
                 }
             }
         })
+        
+        // Start keep-alive service to ensure FCM works for calls
+        try {
+            val keepAliveIntent = Intent(this, im.vector.app.core.services.CallKeepAliveService::class.java)
+            androidx.core.content.ContextCompat.startForegroundService(this, keepAliveIntent)
+            Timber.w("📱 ✅ Keep-alive service started from VectorApplication - app protected from killing")
+        } catch (e: Exception) {
+            Timber.e(e, "❌ CRITICAL: Failed to start keep-alive service from VectorApplication")
+        }
     }
 
     private fun configureEpoxy() {

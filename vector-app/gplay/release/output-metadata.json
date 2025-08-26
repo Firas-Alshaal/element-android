@@ -20,19 +20,6 @@
       "filters": [
         {
           "filterType": "ABI",
-          "value": "armeabi-v7a"
-        }
-      ],
-      "attributes": [],
-      "versionCode": 40106341,
-      "versionName": "1.6.34-dev",
-      "outputFile": "vector-gplay-armeabi-v7a-release.apk"
-    },
-    {
-      "type": "ONE_OF_MANY",
-      "filters": [
-        {
-          "filterType": "ABI",
           "value": "arm64-v8a"
         }
       ],
@@ -46,19 +33,6 @@
       "filters": [
         {
           "filterType": "ABI",
-          "value": "x86_64"
-        }
-      ],
-      "attributes": [],
-      "versionCode": 40106344,
-      "versionName": "1.6.34-dev",
-      "outputFile": "vector-gplay-x86_64-release.apk"
-    },
-    {
-      "type": "ONE_OF_MANY",
-      "filters": [
-        {
-          "filterType": "ABI",
           "value": "x86"
         }
       ],
@@ -66,6 +40,32 @@
       "versionCode": 40106343,
       "versionName": "1.6.34-dev",
       "outputFile": "vector-gplay-x86-release.apk"
+    },
+    {
+      "type": "ONE_OF_MANY",
+      "filters": [
+        {
+          "filterType": "ABI",
+          "value": "armeabi-v7a"
+        }
+      ],
+      "attributes": [],
+      "versionCode": 40106341,
+      "versionName": "1.6.34-dev",
+      "outputFile": "vector-gplay-armeabi-v7a-release.apk"
+    },
+    {
+      "type": "ONE_OF_MANY",
+      "filters": [
+        {
+          "filterType": "ABI",
+          "value": "x86_64"
+        }
+      ],
+      "attributes": [],
+      "versionCode": 40106344,
+      "versionName": "1.6.34-dev",
+      "outputFile": "vector-gplay-x86_64-release.apk"
     }
   ],
   "elementType": "File",
@@ -75,10 +75,10 @@
       "maxApi": 30,
       "baselineProfiles": [
         "baselineProfiles/1/vector-gplay-universal-release.dm",
-        "baselineProfiles/1/vector-gplay-armeabi-v7a-release.dm",
         "baselineProfiles/1/vector-gplay-arm64-v8a-release.dm",
-        "baselineProfiles/1/vector-gplay-x86_64-release.dm",
-        "baselineProfiles/1/vector-gplay-x86-release.dm"
+        "baselineProfiles/1/vector-gplay-x86-release.dm",
+        "baselineProfiles/1/vector-gplay-armeabi-v7a-release.dm",
+        "baselineProfiles/1/vector-gplay-x86_64-release.dm"
       ]
     },
     {
@@ -86,10 +86,10 @@
       "maxApi": 2147483647,
       "baselineProfiles": [
         "baselineProfiles/0/vector-gplay-universal-release.dm",
-        "baselineProfiles/0/vector-gplay-armeabi-v7a-release.dm",
         "baselineProfiles/0/vector-gplay-arm64-v8a-release.dm",
-        "baselineProfiles/0/vector-gplay-x86_64-release.dm",
-        "baselineProfiles/0/vector-gplay-x86-release.dm"
+        "baselineProfiles/0/vector-gplay-x86-release.dm",
+        "baselineProfiles/0/vector-gplay-armeabi-v7a-release.dm",
+        "baselineProfiles/0/vector-gplay-x86_64-release.dm"
       ]
     }
   ],

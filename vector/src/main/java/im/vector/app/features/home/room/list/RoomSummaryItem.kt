@@ -156,7 +156,7 @@ abstract class RoomSummaryItem : VectorEpoxyModel<RoomSummaryItem.Holder>(R.layo
         holder.roomAvatarFailSendingImageView.isVisible = hasFailedSending
         renderSelection(holder, showSelected)
         holder.roomAvatarPresenceImageView.render(showPresence, userPresence)
-        holder.view.findViewById<Button>(R.id.btn_record_original_outside).setOnTouchListener { button, event ->
+        /*holder.view.findViewById<Button>(R.id.btn_record_original_outside).setOnTouchListener { button, event ->
             val waveAnimation = holder.view.findViewById<LottieAnimationView>(R.id.wave_animation_original_outside)
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
@@ -209,7 +209,7 @@ abstract class RoomSummaryItem : VectorEpoxyModel<RoomSummaryItem.Holder>(R.layo
 
                 else -> false
             }
-        }
+        }*/
         if (useSingleLineForLastEvent) {
             holder.subtitleView.setLines(1)
         }
