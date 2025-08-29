@@ -85,6 +85,9 @@ class VectorPreferences @Inject constructor(
         const val SETTINGS_SECURITY_INCOGNITO_KEYBOARD_PREFERENCE_KEY = "SETTINGS_SECURITY_INCOGNITO_KEYBOARD_PREFERENCE_KEY"
 
         const val SETTINGS_CRYPTOGRAPHY_HS_ADMIN_DISABLED_E2E_DEFAULT = "SETTINGS_CRYPTOGRAPHY_HS_ADMIN_DISABLED_E2E_DEFAULT"
+        
+        // PTT Permissions
+        const val SETTINGS_PTT_PERMISSIONS_SHOWN = "SETTINGS_PTT_PERMISSIONS_SHOWN"
 //        const val SETTINGS_SECURE_BACKUP_RESET_PREFERENCE_KEY = "SETTINGS_SECURE_BACKUP_RESET_PREFERENCE_KEY"
 
         // user
@@ -395,6 +398,17 @@ class VectorPreferences @Inject constructor(
 
     fun isMemoryLeakAnalysisEnabled(): Boolean {
         return buildMeta.isDebug && defaultPrefs.getBoolean(SETTINGS_ENABLE_MEMORY_LEAK_ANALYSIS_KEY, false)
+    }
+
+    // PTT onboarding permissions flag helpers
+    fun hasShownPttPermissions(): Boolean {
+        return defaultPrefs.getBoolean(SETTINGS_PTT_PERMISSIONS_SHOWN, false)
+    }
+
+    fun setHasShownPttPermissions(shown: Boolean) {
+        defaultPrefs.edit {
+            putBoolean(SETTINGS_PTT_PERMISSIONS_SHOWN, shown)
+        }
     }
 
     fun didAskUserToEnableSessionPush(): Boolean {
@@ -1308,4 +1322,5 @@ class VectorPreferences @Inject constructor(
             putBoolean(IS_ON_RUST_CRYPTO, boolean)
         }
     }
+
 }

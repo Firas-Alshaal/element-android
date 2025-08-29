@@ -2,6 +2,12 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
     <application
         android:name="im.vector.app.VectorApplication"
         android:allowBackup="false"
@@ -61,7 +67,7 @@
                 tools:node="remove" />
         </provider>
 
-        <provider
+        <!--<provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileProvider"
             android:exported="false"
@@ -69,11 +75,12 @@
             <meta-data
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/sdk_provider_paths" />
-        </provider>
+        </provider>-->
 
         <service
             android:name="im.vector.app.push.fcm.VectorFirebaseMessagingService"
             android:exported="true"
+            android:stopWithTask="false"
             tools:replace="android:exported">
             <intent-filter>
                 <action android:name="com.google.firebase.MESSAGING_EVENT" />
@@ -99,17 +106,9 @@
             android:exported="false"
             android:foregroundServiceType="mediaPlayback" />
 
-        <!-- Keep-alive service to ensure FCM works for calls -->
-        <service
-            android:name="im.vector.app.core.services.CallKeepAliveService"
-            android:enabled="true"
-            android:exported="false"
-            android:stopWithTask="false"
-            android:foregroundServiceType="specialUse">
-            <property 
-                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="call_keepalive" />
-        </service>
+
+
+        <!-- Keep-alive service defined in vector module -->
 
     </application>
 

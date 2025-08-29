@@ -3649,4 +3649,11 @@
     <string name="view_download_replacement_app_title">Download %1$s</string>
     <string name="view_download_replacement_app_subtitle">Faster, more secure, and packed with powerful collaboration tools.</string>
 
+    <!-- PTT Permissions -->
+    <string name="ptt_permissions_description">Your app needs access to system\npermissions in order to work properly.</string>
+    <string name="ptt_permissions_title">App Permissions</string>
+    <string name="ptt_permissions_continue">Continue</string>
+    <string name="ptt_permissions_grant_all">Grant All Permissions</string>
+    <string name="permissions_denied_ptt">Allow permissions to use PTT features properly.</string>
+
 </resources>

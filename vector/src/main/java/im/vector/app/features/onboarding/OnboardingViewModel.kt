@@ -231,8 +231,15 @@ class OnboardingViewModel @AssistedInject constructor(
     }
 
     private fun handleSplashAction(action: OnboardingAction.SplashAction) {
-        setState { copy(onboardingFlow = action.onboardingFlow) }
-        continueToPageAfterSplash(action.onboardingFlow)
+        when (action) {
+            is OnboardingAction.SplashAction.OnPermissionsComplete -> {
+                _viewEvents.post(OnboardingViewEvents.OnPermissionsComplete)
+            }
+            else -> {
+                setState { copy(onboardingFlow = action.onboardingFlow) }
+                continueToPageAfterSplash(action.onboardingFlow)
+            }
+        }
     }
 
     private fun continueToPageAfterSplash(onboardingFlow: OnboardingFlow) {

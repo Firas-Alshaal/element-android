@@ -28,9 +28,19 @@ import timber.log.Timber
 import java.util.concurrent.atomic.AtomicReference
 import javax.inject.Inject
 import javax.inject.Singleton
+import android.content.Context
+import android.content.Intent
+import androidx.core.content.ContextCompat
+import im.vector.app.core.login.PostLoginAction
+import im.vector.app.core.pushers.PushersManager
+import im.vector.app.core.services.CallKeepAliveService
+import im.vector.app.features.mdm.MdmData
+import im.vector.app.features.mdm.MdmService
 
 @Singleton
 class ActiveSessionHolder @Inject constructor(
+        @dagger.hilt.android.qualifiers.ApplicationContext
+        private val context: Context,
         private val activeSessionDataSource: ActiveSessionDataSource,
         private val keyRequestHandler: KeyRequestHandler,
         private val incomingVerificationRequestHandler: IncomingVerificationRequestHandler,
@@ -47,6 +57,8 @@ class ActiveSessionHolder @Inject constructor(
         private val coroutineDispatchers: CoroutineDispatchers,
 ) {
 
+    @Volatile private var keepAliveStarted = false
+
     private var activeSessionReference: AtomicReference<Session?> = AtomicReference()
 
     fun setActiveSession(session: Session) {
@@ -61,6 +73,11 @@ class ActiveSessionHolder @Inject constructor(
         session.callSignalingService().addCallListener(callManager)
         imageManager.onSessionStarted(session)
         guardServiceStarter.start()
+
+        // **SESSION-BASED SERVICE**: Start keep-alive service when user logs in
+        startKeepAliveService(session)
+        im.vector.app.core.watchdog.ServiceWatchdogWorker.schedule(context)
+        Timber.w("ActiveSessionHolder: session=${session.myUserId} → keepAlive + watchdog scheduled")
     }
 
     suspend fun clearActiveSession() {
@@ -69,6 +86,9 @@ class ActiveSessionHolder @Inject constructor(
             Timber.w("clearActiveSession of ${it.myUserId}")
             it.callSignalingService().removeCallListener(callManager)
             it.removeListener(sessionListener)
+
+            // **SESSION-BASED SERVICE**: Stop keep-alive service when user logs out
+            stopKeepAliveService(it)
         }
 
         activeSessionReference.set(null)
@@ -80,6 +100,9 @@ class ActiveSessionHolder @Inject constructor(
         // No need to unregister the pusher, the sign out will (should?) do it server side.
         unregisterUnifiedPushUseCase.execute(pushersManager = null)
         guardServiceStarter.stop()
+
+        androidx.work.WorkManager.getInstance(context)
+                .cancelUniqueWork("svc_watchdog")
     }
 
     fun hasActiveSession(): Boolean {
@@ -88,6 +111,10 @@ class ActiveSessionHolder @Inject constructor(
 
     fun getSafeActiveSession(): Session? {
         return runBlocking { getOrInitializeSession() }
+    }
+
+    suspend fun getSafeActiveSessionSuspend(): Session? {
+        return getOrInitializeSession()
     }
 
     fun getSafeActiveSessionAsync(withSession: ((Session?) -> Unit)) {
@@ -111,6 +138,63 @@ class ActiveSessionHolder @Inject constructor(
     }
 
     fun isWaitingForSessionInitialization() = activeSessionReference.get() == null && authenticationService.hasAuthenticatedSessions()
+
+    /**
+     * **SESSION-BASED SERVICE**: Start keep-alive service when user logs in
+     */
+    @Synchronized
+    private fun startKeepAliveService(session: Session) {
+        try {
+            if (!keepAliveStarted) {
+                keepAliveStarted = true
+                val intent = Intent(context, CallKeepAliveService::class.java)
+                ContextCompat.startForegroundService(context, intent)
+                Timber.w("🔐 Keep-alive service started for user login: ${session.myUserId}")
+
+                // **FCM RECOVERY**: Ensure pushers are registered when service starts
+                // This is critical for proper notification delivery after login
+//                ensureFcmPushersRegistered()
+            } else {
+                Timber.d("Keep-alive already started; skipping duplicate start")
+            }
+        } catch (e: Exception) {
+            Timber.e(e, "❌ Failed to start keep-alive service for user login: ${session.myUserId}")
+            keepAliveStarted = false
+        }
+    }
+
+    /**
+     * Ensure FCM pushers are registered when service starts
+     * This prevents notification issues after service restart
+     */
+    private fun ensureFcmPushersRegistered() {
+        try {
+            // Use reflection to call VectorApplication method safely
+            val app = context.applicationContext
+            if (app.javaClass.simpleName.contains("VectorApplication")) {
+                val method = app.javaClass.getDeclaredMethod("ensureFcmTokenAndPushersAreRegistered")
+                method.isAccessible = true
+                method.invoke(app)
+                Timber.d("✅ FCM pushers registration triggered from ActiveSessionHolder")
+            }
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to trigger FCM pushers registration from ActiveSessionHolder")
+        }
+    }
+
+    /**
+     * **SESSION-BASED SERVICE**: Stop keep-alive service when user logs out
+     */
+    private fun stopKeepAliveService(session: Session) {
+        try {
+            val intent = Intent(context, CallKeepAliveService::class.java)
+            context.stopService(intent)
+            keepAliveStarted = false
+            Timber.w("🚪 Keep-alive service stopped for user logout: ${session.myUserId}")
+        } catch (e: Exception) {
+            Timber.e(e, "❌ Failed to stop keep-alive service for user logout: ${session.myUserId}")
+        }
+    }
 
     // TODO Stop sync ?
 //    fun switchToSession(sessionParams: SessionParams) {

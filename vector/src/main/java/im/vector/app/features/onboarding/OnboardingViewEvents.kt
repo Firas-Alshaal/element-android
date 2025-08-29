@@ -55,4 +55,5 @@ sealed class OnboardingViewEvents : VectorViewEvents {
     object OnChooseProfilePicture : OnboardingViewEvents()
     object OnPersonalizationComplete : OnboardingViewEvents()
     object OnBack : OnboardingViewEvents()
+    object OnPermissionsComplete : OnboardingViewEvents()
 }

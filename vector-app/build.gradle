@@ -451,3 +451,22 @@ dependencies {
     debugImplementation libs.androidx.fragmentTestingManifest
     debugImplementation 'com.squareup.leakcanary:leakcanary-android:2.10'
 }
+
+
+// Ensure IDE can resolve APK listing redirect for variants like gplayDebug (AGP 8+)
+plugins.withId('com.android.application') {
+    def ext = extensions.findByName('androidComponents')
+    if (ext != null) {
+        try {
+            ext.class.getMethod('setEnableApkListingFileRedirect', Boolean.TYPE).invoke(ext, true)
+        } catch (Throwable ignored) {
+            try {
+                def prop = ext.class.getMethod('getEnableApkListingFileRedirect').invoke(ext)
+                def setter = prop?.class?.methods?.find { it.name == 'set' && it.parameterTypes?.size() == 1 }
+                if (setter != null) setter.invoke(prop, true)
+            } catch (Throwable ignored2) {
+                // No-op if not available; default may be enabled depending on AGP
+            }
+        }
+    }
+}

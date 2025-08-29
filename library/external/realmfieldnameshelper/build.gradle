@@ -4,6 +4,17 @@ apply plugin: 'java'
 sourceCompatibility = versions.sourceCompat
 targetCompatibility = versions.targetCompat
 
+// Align Kotlin JVM target with Java and use toolchain 17 for this module
+kotlin {
+    jvmToolchain(17)
+}
+
+tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+    kotlinOptions {
+        jvmTarget = versions.jvmTarget
+    }
+}
+
 dependencies {
     implementation 'com.squareup:javapoet:1.13.0'
 }

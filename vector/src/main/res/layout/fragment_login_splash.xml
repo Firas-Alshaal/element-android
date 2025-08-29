@@ -47,7 +47,7 @@
             android:layout_marginTop="8dp"
             android:contentDescription="@string/app_name"
             android:src="@drawable/element_logotype"
-            app:tint="?colorSecondary"
+            app:tint="#2A2A4D"
             tools:ignore="MissingPrefix" />
 
     </LinearLayout>
@@ -210,6 +210,6 @@
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         tools:text="@string/settings_version"
-        tools:visibility="visible" />
+        tools:visibility="invisible" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

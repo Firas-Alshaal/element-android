@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:padding="16dp"
+    android:background="@drawable/permission_item_background"
+    android:layout_marginVertical="4dp"
+    android:layout_marginHorizontal="8dp"
+    android:elevation="2dp"
+    android:clickable="true"
+    android:focusable="true"
+    android:foreground="?android:attr/selectableItemBackground">
+
+    <!-- Permission Icon -->
+    <FrameLayout
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:layout_marginEnd="16dp"
+        android:layout_gravity="center_vertical">
+
+        <!-- Icon Background Circle -->
+        <View
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="@drawable/circle_permission_icon_bg"
+            android:alpha="0.1" />
+
+        <!-- Permission Icon -->
+        <ImageView
+            android:id="@+id/permissionIcon"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:layout_gravity="center"
+            android:tint="@color/permission_icon_tint"
+            android:alpha="0.8"
+            tools:src="@drawable/ic_microphone_on" />
+    </FrameLayout>
+
+    <!-- Permission Content -->
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical"
+        android:layout_gravity="center_vertical">
+
+        <!-- Permission Title -->
+        <TextView
+            android:id="@+id/permissionTitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@android:color/white"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="4dp"
+            tools:text="Record Audio" />
+
+        <!-- Permission Description -->
+        <TextView
+            android:id="@+id/permissionDescription"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/text_secondary_light"
+            android:textSize="14sp"
+            android:lineSpacingExtra="2dp"
+            android:alpha="0.9"
+            tools:text="Talk to people via push-to-talk" />
+    </LinearLayout>
+
+    <!-- Permission Status -->
+    <FrameLayout
+        android:layout_width="32dp"
+        android:layout_height="32dp"
+        android:layout_gravity="center_vertical"
+        android:layout_marginStart="12dp">
+
+        <!-- Granted Status (Green Check) -->
+        <ImageView
+            android:id="@+id/permissionGrantedIcon"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:layout_gravity="center"
+            android:src="@drawable/ic_check_circle"
+            android:tint="@color/permission_granted_green"
+            android:visibility="gone"
+            android:alpha="0.9" />
+
+        <!-- Pending Status (Arrow) -->
+        <ImageView
+            android:id="@+id/permissionPendingIcon"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:layout_gravity="center"
+            android:src="@drawable/ic_arrow_forward"
+            android:tint="@color/text_secondary_light"
+            android:visibility="visible"
+            android:alpha="0.6" />
+
+        <!-- Required Badge -->
+        <View
+            android:id="@+id/requiredBadge"
+            android:layout_width="8dp"
+            android:layout_height="8dp"
+            android:layout_gravity="top|end"
+            android:background="@drawable/circle_required_badge"
+            android:layout_marginTop="2dp"
+            android:layout_marginEnd="2dp"
+            android:visibility="gone" />
+    </FrameLayout>
+
+</LinearLayout>

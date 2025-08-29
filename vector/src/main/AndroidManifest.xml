@@ -48,11 +48,19 @@
     <!-- For VectorSyncAndroidService -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
+    <!-- BOOT_COMPLETED -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+
     <!-- For LocationSharingAndroidService -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
 
     <!-- For ScreenCaptureAndroidService -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
+
+    <!-- Battery optimization - Required for PTT functionality -->
+    <!-- Required for long polling account synchronisation in background.
+    If not present ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS intent action won't work -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <!-- Jitsi SDK is now API23+ -->
     <uses-sdk tools:overrideLibrary="com.swmansion.gesturehandler,org.jitsi.meet.sdk,com.oney.WebRTCModule,com.learnium.RNDeviceInfo,com.reactnativecommunity.asyncstorage,com.ocetnik.timer,com.calendarevents,com.reactnativecommunity.netinfo,com.kevinresol.react_native_default_preference,com.rnimmersive,com.rnimmersivemode,com.corbt.keepawake,com.BV.LinearGradient,com.horcrux.svg,com.oblador.performance,com.reactnativecommunity.slider,com.brentvatne.react,com.reactnativecommunity.clipboard,com.swmansion.gesturehandler.react,org.linusu,org.reactnative.maskedview,com.reactnativepagerview,com.swmansion.reanimated,com.th3rdwave.safeareacontext,com.swmansion.rnscreens,org.devio.rn.splashscreen,com.reactnativecommunity.webview,org.wonday.orientation" />
@@ -365,6 +373,7 @@
         <service
             android:name=".core.services.CallAndroidService"
             android:foregroundServiceType="phoneCall"
+            android:stopWithTask="false"
             android:exported="false">
             <!-- in order to get headset button events -->
             <intent-filter>
@@ -415,6 +424,15 @@
             android:name=".features.home.room.detail.composer.PttTcpReceiverService"
             android:enabled="true"
             android:exported="false" />
+
+        <service
+            android:name=".core.services.CallKeepAliveService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse"
+            android:stopWithTask="false">
+            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                      android:value="keepAlive"/>
+        </service>
 
         <!-- Receivers -->
 
@@ -482,6 +500,18 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
+
+        <receiver
+            android:name="im.vector.app.core.receivers.BootReceiver"
+            android:exported="true"
+            android:directBootAware="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED"/>
+                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED"/>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
+                <action android:name="android.intent.action.USER_UNLOCKED"/>
+            </intent-filter>
+        </receiver>
     </application>
 
 </manifest>

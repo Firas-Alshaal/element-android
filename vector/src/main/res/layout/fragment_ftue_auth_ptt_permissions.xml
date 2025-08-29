@@ -1,0 +1,131 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/background_dark"
+    android:padding="0dp">
+
+    <!-- Header Section with Microphone Animation -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="0.4"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:background="@drawable/gradient_background_dark"
+        android:paddingHorizontal="24dp"
+        android:paddingVertical="32dp">
+
+        <!-- Animated Microphone with Green Circle -->
+        <FrameLayout
+            android:layout_width="120dp"
+            android:layout_height="120dp"
+            android:layout_marginBottom="24dp">
+            
+            <!-- Green Circle Background -->
+            <View
+                android:layout_width="120dp"
+                android:layout_height="120dp"
+                android:background="@drawable/circle_green_gradient"
+                android:elevation="4dp" />
+            
+            <!-- Pulse Animation Circle -->
+            <View
+                android:layout_width="120dp"
+                android:layout_height="120dp"
+                android:layout_gravity="center"
+                android:background="@drawable/circle_green_pulse"
+                android:alpha="0.3" />
+
+            <!-- Microphone Icon -->
+            <ImageView
+                android:layout_width="64dp"
+                android:layout_height="64dp"
+                android:layout_gravity="center"
+                android:src="@drawable/ic_microphone_on"
+                android:tint="@android:color/white"
+                android:elevation="8dp" />
+
+            <!-- Pulse Animation Circles -->
+            <View
+                android:id="@+id/pulseMicrophoneRing1"
+                android:layout_width="120dp"
+                android:layout_height="120dp"
+                android:layout_gravity="center"
+                android:background="@drawable/circle_green_pulse"
+                android:alpha="0.6"
+                android:visibility="visible" />
+            
+            <View
+                android:id="@+id/pulseMicrophoneRing2"
+                android:layout_width="140dp"
+                android:layout_height="140dp"
+                android:layout_gravity="center"
+                android:background="@drawable/circle_green_pulse"
+                android:alpha="0.4"
+                android:visibility="visible" />
+        </FrameLayout>
+
+        <!-- Title -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="App Permissions"
+            android:textColor="@android:color/white"
+            android:textSize="24sp"
+            android:textStyle="bold"
+            android:letterSpacing="0.02"
+            android:layout_marginBottom="8dp" />
+
+        <!-- Description -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/ptt_permissions_description"
+            android:textColor="@color/text_secondary_light"
+            android:textSize="16sp"
+            android:gravity="center"
+            android:lineSpacingExtra="4dp"
+            android:alpha="0.9" />
+    </LinearLayout>
+
+    <!-- Permissions List -->
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/permissionsRecyclerView"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="0.4"
+        android:paddingHorizontal="16dp"
+        android:paddingTop="16dp"
+        android:clipToPadding="false"
+        android:scrollbars="none"
+        android:overScrollMode="never"
+        tools:listitem="@layout/item_ptt_permission" />
+
+    <!-- Continue Button -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp"
+        android:background="@drawable/gradient_background_button_area">
+
+        <Button
+            android:id="@+id/continueButton"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:text="CONTINUE"
+            android:textColor="@android:color/white"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:letterSpacing="0.1"
+            android:background="@drawable/button_primary_rounded"
+            android:elevation="8dp"
+            android:stateListAnimator="@animator/button_elevation"
+            android:enabled="false" />
+    </LinearLayout>
+
+</LinearLayout>

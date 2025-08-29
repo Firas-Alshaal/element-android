@@ -46,11 +46,13 @@ import im.vector.app.features.onboarding.OnboardingViewState
 import im.vector.app.features.onboarding.ftueauth.terms.FtueAuthLegacyStyleTermsFragment
 import im.vector.app.features.onboarding.ftueauth.terms.FtueAuthTermsFragment
 import im.vector.app.features.onboarding.ftueauth.terms.FtueAuthTermsLegacyStyleFragmentArgument
+import im.vector.app.features.settings.VectorPreferences
 import im.vector.lib.core.utils.compat.getParcelableExtraCompat
 import im.vector.lib.strings.CommonStrings
 import org.matrix.android.sdk.api.auth.registration.Stage
 import org.matrix.android.sdk.api.auth.toLocalizedLoginTerms
 import org.matrix.android.sdk.api.extensions.tryOrNull
+import javax.inject.Inject
 
 private const val FRAGMENT_REGISTRATION_STAGE_TAG = "FRAGMENT_REGISTRATION_STAGE_TAG"
 private const val FRAGMENT_LOGIN_TAG = "FRAGMENT_LOGIN_TAG"
@@ -64,6 +66,7 @@ class FtueAuthVariant(
         private val vectorFeatures: VectorFeatures,
         private val orientationLocker: ScreenOrientationLocker,
         private val buildMeta: BuildMeta,
+        private val vectorPreferences: VectorPreferences,
 ) : OnboardingVariant {
 
     private val enterAnim = R.anim.enter_fade_in
@@ -109,11 +112,16 @@ class FtueAuthVariant(
     }
 
     private fun addFirstFragment() {
-        val splashFragment = when (vectorFeatures.isOnboardingSplashCarouselEnabled()) {
-            true -> FtueAuthSplashCarouselFragment::class.java
-            else -> FtueAuthSplashFragment::class.java
+        // Check if we should show PTT permissions first
+        if (!vectorPreferences.hasShownPttPermissions()) {
+            activity.addFragment(views.loginFragmentContainer, FtueAuthPttPermissionsFragment::class.java)
+        } else {
+            val splashFragment = when (vectorFeatures.isOnboardingSplashCarouselEnabled()) {
+                true -> FtueAuthSplashCarouselFragment::class.java
+                else -> FtueAuthSplashFragment::class.java
+            }
+            activity.addFragment(views.loginFragmentContainer, splashFragment)
         }
-        activity.addFragment(views.loginFragmentContainer, splashFragment)
     }
 
     private fun updateWithState(viewState: OnboardingViewState) {
@@ -217,6 +225,7 @@ class FtueAuthVariant(
             OnboardingViewEvents.OnChooseProfilePicture -> onChooseProfilePicture()
             OnboardingViewEvents.OnPersonalizationComplete -> onPersonalizationComplete()
             OnboardingViewEvents.OnBack -> activity.popBackstack()
+            OnboardingViewEvents.OnPermissionsComplete -> onPermissionsComplete()
             OnboardingViewEvents.EditServerSelection -> {
                 activity.addFragmentToBackstack(
                         views.loginFragmentContainer,
@@ -541,5 +550,14 @@ class FtueAuthVariant(
                 tag = FRAGMENT_LOGIN_TAG,
                 option = commonOption
         )
+    }
+
+    private fun onPermissionsComplete() {
+        // Navigate to splash screen after permissions are granted
+        val splashFragment = when (vectorFeatures.isOnboardingSplashCarouselEnabled()) {
+            true -> FtueAuthSplashCarouselFragment::class.java
+            else -> FtueAuthSplashFragment::class.java
+        }
+        activity.replaceFragment(views.loginFragmentContainer, splashFragment, useCustomAnimation = true)
     }
 }

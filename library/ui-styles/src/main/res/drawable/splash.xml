@@ -6,10 +6,8 @@
     <item android:drawable="?colorBackgroundFloating" />
 
     <!-- Centered logo -->
-    <item>
-        <bitmap
-            android:gravity="center"
-            android:src="@drawable/element_splash_white" />
-    </item>
+    <item
+        android:drawable="@drawable/element_logo_green"
+        android:gravity="center" />
 
 </layer-list>

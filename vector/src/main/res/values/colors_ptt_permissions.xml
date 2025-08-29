@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- PTT Permissions Colors -->
+    <color name="background_dark">#1A1A1A</color>
+    <color name="text_secondary_light">#CCCCCC</color>
+    <color name="permission_icon_tint">#FFFFFF</color>
+    <color name="permission_granted_green">#4CAF50</color>
+    <color name="permission_required_red">#F44336</color>
+    <color name="permission_item_background">#2A2A2A</color>
+    <color name="green_primary">#4CAF50</color>
+    <color name="green_secondary">#66BB6A</color>
+    <color name="green_accent">#81C784</color>
+    <color name="button_primary_blue">#2196F3</color>
+    <color name="button_primary_blue_dark">#1976D2</color>
+</resources>

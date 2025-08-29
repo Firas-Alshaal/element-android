@@ -13,12 +13,14 @@ import im.vector.app.core.resources.BuildMeta
 import im.vector.app.databinding.ActivityLoginBinding
 import im.vector.app.features.VectorFeatures
 import im.vector.app.features.onboarding.ftueauth.FtueAuthVariant
+import im.vector.app.features.settings.VectorPreferences
 import javax.inject.Inject
 
 class OnboardingVariantFactory @Inject constructor(
         private val vectorFeatures: VectorFeatures,
         private val orientationLocker: ScreenOrientationLocker,
         private val buildMeta: BuildMeta,
+        private val vectorPreferences: VectorPreferences,
 ) {
 
     fun create(
@@ -35,6 +37,7 @@ class OnboardingVariantFactory @Inject constructor(
                 vectorFeatures = vectorFeatures,
                 orientationLocker = orientationLocker,
                 buildMeta = buildMeta,
+                vectorPreferences = vectorPreferences,
         )
     }
 }
