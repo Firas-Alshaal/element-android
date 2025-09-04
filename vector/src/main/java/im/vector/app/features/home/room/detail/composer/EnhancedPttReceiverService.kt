@@ -32,10 +32,13 @@ import timber.log.Timber
 import java.io.BufferedInputStream
 import java.net.InetSocketAddress
 import java.net.Socket
+import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.TimeUnit
+import kotlin.math.max
 
 /**
  * Enhanced PTT Receiver Service with TURN support and background operation
- * 
+ *
  * Features:
  * - Background PTT reception
  * - TURN server support for firewall traversal
@@ -46,10 +49,10 @@ import java.net.Socket
 class EnhancedPttReceiverService : Service() {
 
     private val serverPort = 8008
-    private val enhancedSampleRate = 22050 // Enhanced quality
+    private val enhancedSampleRate = 16000 // Enhanced quality
     private val channelConfig = AudioFormat.CHANNEL_OUT_MONO
     private val audioEncoding = AudioFormat.ENCODING_PCM_16BIT
-    private val enhancedAudioBufferSize = 4096 // Optimized buffer
+    private val enhancedAudioBufferSize = 640 * 8 // Optimized buffer
 
     private var isRunning = false
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -61,6 +64,8 @@ class EnhancedPttReceiverService : Service() {
     private var audioTrack: AudioTrack? = null
     private var audioManager: AudioManager? = null
     private var audioFocusRequest: AudioFocusRequest? = null
+
+    private val jitterBuffer = LinkedBlockingQueue<ByteArray>(20)
 
     companion object {
         private const val NOTIFICATION_ID = 12345
@@ -93,14 +98,14 @@ class EnhancedPttReceiverService : Service() {
         startForeground(NOTIFICATION_ID, createPttNotification())
 
         Timber.d("Enhanced PTT Receiver Service started for room: $currentRoomId")
-        
+
         if (currentSpeakerId == "PRESTART") {
             // Pre-start mode - just initialize and wait
             Timber.d("Enhanced PTT Receiver pre-started and ready")
         } else if (!senderIp.isNullOrEmpty()) {
             connectToEnhancedSender()
         }
-        
+
         return START_STICKY
     }
 
@@ -125,7 +130,6 @@ class EnhancedPttReceiverService : Service() {
                 Timber.d("✅ Enhanced PTT: Connected to sender")
                 setupEnhancedAudioPlayback()
                 startEnhancedAudioReception(socket)
-
             } catch (e: Exception) {
                 Timber.e(e, "Enhanced PTT connection error")
                 stopSelf()
@@ -158,7 +162,7 @@ class EnhancedPttReceiverService : Service() {
             Timber.d("Connecting via TURN relay: $TURN_HOST")
             val socket = Socket()
             socket.connect(InetSocketAddress(TURN_HOST, 3478), 5000) // 5 second timeout
-            
+
             // TODO: Implement full TURN protocol handshake
             // For now, basic relay connection
             Timber.d("✅ TURN relay connection established")
@@ -174,6 +178,9 @@ class EnhancedPttReceiverService : Service() {
      */
     private fun setupEnhancedAudioPlayback() {
         try {
+
+            val minBuf = AudioTrack.getMinBufferSize(enhancedSampleRate, channelConfig, audioEncoding)
+
             // Request audio focus for high-priority playback
             requestEnhancedAudioFocus()
 
@@ -193,8 +200,9 @@ class EnhancedPttReceiverService : Service() {
                                     .setChannelMask(channelConfig)
                                     .build()
                     )
-                    .setBufferSizeInBytes(enhancedAudioBufferSize)
+                    .setBufferSizeInBytes(max(minBuf, enhancedAudioBufferSize))
                     .setTransferMode(AudioTrack.MODE_STREAM)
+                    .setPerformanceMode(AudioTrack.PERFORMANCE_MODE_LOW_LATENCY)
                     .build()
 
             // Enhanced audio manager configuration for background operation
@@ -203,8 +211,14 @@ class EnhancedPttReceiverService : Service() {
             audioManager?.isSpeakerphoneOn = true
 
             // Force maximum volume for PTT
-            val maxVolume = audioManager?.getStreamMaxVolume(AudioManager.STREAM_VOICE_CALL) ?: 15
-            audioManager?.setStreamVolume(AudioManager.STREAM_VOICE_CALL, maxVolume, 0)
+            val maxVolume = audioManager?.getStreamMaxVolume(AudioManager.STREAM_MUSIC) ?: 15
+            audioManager?.setStreamVolume(AudioManager.STREAM_MUSIC, maxVolume, 0)
+
+            val maxMusicVol = audioManager?.getStreamMaxVolume(AudioManager.STREAM_MUSIC) ?: 15
+            audioManager?.setStreamVolume(AudioManager.STREAM_MUSIC, maxMusicVol, 0)
+
+            val maxCallVol = audioManager?.getStreamMaxVolume(AudioManager.STREAM_VOICE_CALL) ?: 7
+            audioManager?.setStreamVolume(AudioManager.STREAM_VOICE_CALL, maxCallVol, 0)
 
             // Force speaker output on newer Android versions
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -218,7 +232,6 @@ class EnhancedPttReceiverService : Service() {
 
             audioTrack?.play()
             Timber.d("✅ Enhanced audio playback setup complete")
-
         } catch (e: Exception) {
             Timber.e(e, "Enhanced audio setup failed")
         }
@@ -286,49 +299,65 @@ class EnhancedPttReceiverService : Service() {
                 val input = BufferedInputStream(socket.getInputStream(), enhancedAudioBufferSize)
                 val buffer = ByteArray(enhancedAudioBufferSize)
                 val expectedToken = currentRoomId?.hashCode()?.toString() + ":"
-                
+
                 Timber.d("🎧 Enhanced audio reception started - token: '$expectedToken'")
 
                 var receivedPackets = 0
                 var validPackets = 0
+                var silenceCount = 0
 
-                while (isRunning && !socket.isClosed) {
-                    try {
-                        val read = input.read(buffer)
-                        
-                        if (read > 0) {
-                            receivedPackets++
-                            
-                            // Enhanced token validation
-                            if (isValidEnhancedPacket(buffer, read, expectedToken)) {
-                                validPackets++
-                                val tokenLength = expectedToken.toByteArray().size
-                                val audioDataLength = read - tokenLength
-
-                                if (audioDataLength > 0) {
-                                    // Enhanced audio playback with error handling
-                                    playEnhancedAudio(buffer, tokenLength, audioDataLength)
-                                }
-
-                                if (validPackets % 20 == 1) {
-                                    Timber.d("🔊 Enhanced playback: packet #$validPackets, ${audioDataLength} bytes")
-                                }
+                // Launch separate playback loop
+                launch {
+                    var prebuffered = false
+                    while (isRunning && audioTrack?.playState == AudioTrack.PLAYSTATE_PLAYING) {
+                        val frame = jitterBuffer.poll(50, TimeUnit.MILLISECONDS)
+                        if (frame != null) {
+                            audioTrack?.write(frame, 0, frame.size, AudioTrack.WRITE_BLOCKING)
+                            if (!prebuffered && jitterBuffer.size >= 8) {
+                                prebuffered = true
+                                Timber.d("✅ Pre-buffer complete, smooth playback started")
                             }
-                        } else if (read == 0) {
-                            // No data - continue
+                            silenceCount = 0
                         } else {
-                            Timber.w("Enhanced reception error: read = $read")
-                            break
-                        }
-                    } catch (e: Exception) {
-                        if (isRunning) {
-                            Timber.e(e, "Enhanced audio reception error")
-                            break
+                            silenceCount++
+
+                            // optional: play silence to keep stream stable
+                            if (silenceCount >= 3) { // ~150ms gap
+                                audioTrack?.write(ByteArray(640), 0, 640, AudioTrack.WRITE_BLOCKING)
+                                silenceCount = 0
+                            }
                         }
                     }
                 }
 
-                Timber.d("Enhanced audio reception ended: $validPackets/$receivedPackets packets processed")
+                // Read loop → enqueue into jitter buffer
+                while (isRunning && !socket.isClosed) {
+                    val read = input.read(buffer)
+                    if (read > 0) {
+                        receivedPackets++
+
+                        if (isValidEnhancedPacket(buffer, read, expectedToken)) {
+                            validPackets++
+                            val tokenLength = expectedToken.toByteArray().size
+                            val audioDataLength = read - tokenLength
+                            if (audioDataLength > 0) {
+                                val frame = buffer.copyOfRange(tokenLength, read)
+                                if (!jitterBuffer.offer(frame)) {
+                                    jitterBuffer.poll() // drop one old frame
+                                    jitterBuffer.offer(frame)
+                                }
+                            }
+                            if (validPackets % 20 == 1) {
+                                Timber.d("🔊 Buffered #$validPackets (${audioDataLength}B), jitterBuffer=${jitterBuffer.size}")
+                            }
+                        }
+                    } else if (read < 0) {
+                        Timber.w("Enhanced reception error: read=$read")
+                        break
+                    }
+                }
+
+                Timber.d("Enhanced reception ended: $validPackets/$receivedPackets packets")
             } catch (e: Exception) {
                 Timber.e(e, "Enhanced reception failed")
             } finally {
@@ -343,44 +372,44 @@ class EnhancedPttReceiverService : Service() {
      */
     private fun isValidEnhancedPacket(buffer: ByteArray, read: Int, expectedToken: String): Boolean {
         val tokenBytes = expectedToken.toByteArray()
-        
-        if (read < tokenBytes.size) return false
-        
+
+        if (read < tokenBytes.size + 320) return false
+
         for (i in tokenBytes.indices) {
             if (buffer[i] != tokenBytes[i]) {
                 return false
             }
         }
-        
+
         return true
     }
 
     /**
      * Play enhanced audio with optimized buffering
      */
-    private fun playEnhancedAudio(buffer: ByteArray, offset: Int, length: Int) {
-        try {
-            var remaining = length
-            var currentOffset = offset
-            
-            while (remaining > 0 && audioTrack?.playState == AudioTrack.PLAYSTATE_PLAYING) {
-                val written = audioTrack?.write(buffer, currentOffset, remaining) ?: 0
-                if (written <= 0) break
-                
-                currentOffset += written
-                remaining -= written
-            }
-        } catch (e: Exception) {
-            Timber.w(e, "Enhanced audio playback error")
-        }
-    }
+//    private fun playEnhancedAudio(buffer: ByteArray, offset: Int, length: Int) {
+//        try {
+//            var remaining = length
+//            var currentOffset = offset
+//
+//            while (remaining > 0 && audioTrack?.playState == AudioTrack.PLAYSTATE_PLAYING) {
+//                val written = audioTrack?.write(buffer, currentOffset, remaining) ?: 0
+//                if (written <= 0) break
+//
+//                currentOffset += written
+//                remaining -= written
+//            }
+//        } catch (e: Exception) {
+//            Timber.w(e, "Enhanced audio playback error")
+//        }
+//    }
 
     /**
      * Enhanced cleanup with proper resource management
      */
     private fun cleanupEnhancedAudio() {
         isRunning = false
-        
+
         // Release audio focus
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             audioFocusRequest?.let { request ->
@@ -412,8 +441,9 @@ class EnhancedPttReceiverService : Service() {
 
         try {
             scope.cancel()
-        } catch (_: Exception) {}
-        
+        } catch (_: Exception) {
+        }
+
         Timber.d("Enhanced PTT Receiver cleanup completed")
     }
 
