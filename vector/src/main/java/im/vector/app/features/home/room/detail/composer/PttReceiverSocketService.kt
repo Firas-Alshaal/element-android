@@ -422,8 +422,8 @@ class MatrixPttReceiver(
                 AudioFormat.CHANNEL_OUT_MONO,
                 AudioFormat.ENCODING_PCM_16BIT
         )
-        // بوفر تشغيل أوسع (~300ms) بدل 2048
-        val trackBuf = max(min, 320 /*10ms*/ * 30)
+        // Ultra-enhanced buffer for crystal clear playback (~500ms)
+        val trackBuf = max(min, 1024 /*32ms chunks*/ * 15) // Support 15 chunks = 480ms buffer
 
         val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
         audioManager.mode = AudioManager.MODE_NORMAL               // لا نستخدم مسار المكالمات هنا
@@ -506,8 +506,8 @@ class MatrixPttReceiver(
         }
         var started = false
         var bufferedMs = 0
-        val prebufferMs = 180   // انتظر ~180ms قبل البدء
-        val maxBufferedMs = 400 // لو زاد التراكم، نسقط أقدم إطار
+        val prebufferMs = 80    // Further reduced prebuffer for ultra-fast response
+        val maxBufferedMs = 240 // Optimized max buffer for smooth flow without delays
 
         Timber.d("🔁 Playback loop started (prebuffer=${prebufferMs}ms, trackBuf=$trackBuf)")
 

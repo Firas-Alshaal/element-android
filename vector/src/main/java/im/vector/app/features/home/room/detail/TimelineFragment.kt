@@ -136,6 +136,8 @@ import im.vector.app.features.home.room.detail.composer.MessageComposerFragment
 import im.vector.app.features.home.room.detail.composer.MessageComposerViewModel
 import im.vector.app.features.home.room.detail.composer.PttManager
 import im.vector.app.features.home.room.detail.composer.PttMatrixSyncHandler
+import im.vector.app.features.home.room.detail.composer.EnhancedPttManager
+import im.vector.app.features.home.room.detail.composer.EnhancedPttReceiverService
 import im.vector.app.features.home.room.detail.composer.PttTcpReceiverService
 import im.vector.app.features.home.room.detail.composer.boolean
 import im.vector.app.features.home.room.detail.composer.voice.VoiceRecorderFragment
@@ -484,6 +486,9 @@ class TimelineFragment :
         val btnRecord = views.pttAndComposerContainer.findViewById<Button>(R.id.btn_record_original)
         val waveAnimation = views.pttAndComposerContainer.findViewById<LottieAnimationView>(R.id.wave_animation_original)
 
+        // Initialize Enhanced PTT Manager (make it accessible in both actions)
+        var enhancedPttManager: EnhancedPttManager? = null
+
         btnRecord.setOnTouchListener { _, event ->
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
@@ -492,15 +497,8 @@ class TimelineFragment :
                         requestVoicePermission {
                             Toast.makeText(requireContext(), "Microphone permission granted. Press and hold to talk.", Toast.LENGTH_SHORT).show()
                         }
-                        return@setOnTouchListener false // لا تبدأ البث
+                        return@setOnTouchListener false
                     }
-
-//                    isPushToTalkDialogShowing = true
-//                    sendPttStatus("talking")
-//
-//                    pttManager.startStreaming(timelineArgs.roomId)
-//                    waveAnimation.visibility = View.VISIBLE
-//                    waveAnimation.playAnimation()
 
                     lifecycleScope.launch {
                         // ✅ POLICE RADIO PROTOCOL: Check if channel is busy
@@ -526,36 +524,49 @@ class TimelineFragment :
 
                         isPushToTalkDialogShowing = true
                         
-                        // Stop any existing receiver service immediately
+                        // Initialize Enhanced PTT Manager
+                        enhancedPttManager = EnhancedPttManager(requireContext(), session)
+                        
+                        // Stop any existing receiver services
                         val stopIntent = Intent(requireContext(), PttTcpReceiverService::class.java).apply {
                             putExtra("roomId", timelineArgs.roomId)
                         }
                         requireContext().stopService(stopIntent)
                         
-                        // ✅ Set up timeout callback to stop wave animation
-                        pttManager.setOnTimeoutCallback {
+                        val stopEnhancedIntent = Intent(requireContext(), EnhancedPttReceiverService::class.java).apply {
+                            putExtra("roomId", timelineArgs.roomId)
+                        }
+                        requireContext().stopService(stopEnhancedIntent)
+                        
+                        // ✅ Set up enhanced timeout callback
+                        enhancedPttManager?.setOnTimeoutCallback {
                             requireActivity().runOnUiThread {
                                 waveAnimation.pauseAnimation()
                                 waveAnimation.visibility = View.GONE
                                 isPushToTalkDialogShowing = false
-                                Timber.d("⏰ Wave animation stopped due to 30-second timeout in TimelineFragment")
+                                Timber.d("⏰ Enhanced PTT timeout - wave animation stopped")
+                                Toast.makeText(requireContext(), "PTT timeout (30s limit)", Toast.LENGTH_SHORT).show()
                             }
                         }
                         
-                        // ✅ COORDINATE PTT START: Matrix event first, then audio transmission
+                        // ✅ START ENHANCED PTT: Better quality, TURN support, 4G optimized
                         try {
-                            pttManager.startStreamingCoordinated(timelineArgs.roomId)
+                            Timber.d("🚀 Starting Enhanced PTT for room: ${timelineArgs.roomId}")
+                            enhancedPttManager?.startEnhancedPttStreaming(timelineArgs.roomId)
+                            
+                            withContext(Dispatchers.Main) {
+                                waveAnimation.visibility = View.VISIBLE
+                                waveAnimation.playAnimation()
+                                Toast.makeText(requireContext(), "🎤 Enhanced PTT active", Toast.LENGTH_SHORT).show()
+                            }
                         } catch (e: Exception) {
-                            Timber.e(e, "❌ Failed to start coordinated PTT")
+                            Timber.e(e, "❌ Failed to start Enhanced PTT")
+                            withContext(Dispatchers.Main) {
+                                Toast.makeText(requireContext(), "Failed to start PTT", Toast.LENGTH_SHORT).show()
+                            }
                             return@launch
                         }
-
-                        withContext(Dispatchers.Main) {
-                            waveAnimation.visibility = View.VISIBLE
-                            waveAnimation.playAnimation()
-                        }
                     }
-
 
                     true
                 }
@@ -563,17 +574,22 @@ class TimelineFragment :
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                     if (!isPushToTalkDialogShowing) return@setOnTouchListener false
 
-                    // ✅ Clear timeout callback
-                    pttManager.clearTimeoutCallback()
+                    // ✅ Clear enhanced timeout callback
+                    enhancedPttManager?.clearTimeoutCallback()
 
-                    // ✅ COORDINATE PTT STOP: Use coordinated stop with floor release
+                    // ✅ ENHANCED PTT STOP: Coordinated stop with voice message saving
                     CoroutineScope(Dispatchers.IO).launch {
                         try {
-                            pttManager.stopStreamingCoordinated(timelineArgs.roomId)
+                            Timber.d("🛑 Stopping Enhanced PTT for room: ${timelineArgs.roomId}")
+                            enhancedPttManager?.stopEnhancedPttStreaming(timelineArgs.roomId)
+                            
+                            withContext(Dispatchers.Main) {
+                                Toast.makeText(requireContext(), "PTT message sent", Toast.LENGTH_SHORT).show()
+                            }
                         } catch (e: Exception) {
-                            Timber.e(e, "❌ Failed to stop coordinated PTT")
-                            // Fallback to old method
-                    pttManager.stopStreaming()
+                            Timber.e(e, "❌ Failed to stop Enhanced PTT - using fallback")
+                            // Fallback to legacy method if needed
+                            enhancedPttManager?.stopStreaming()
                             sendPttStatus("idle")
                         }
                     }

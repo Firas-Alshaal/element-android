@@ -425,14 +425,22 @@
             android:enabled="true"
             android:exported="false" />
 
+        <!-- Enhanced PTT Receiver Service with TURN support and background operation -->
         <service
-            android:name=".core.services.CallKeepAliveService"
+            android:name=".features.home.room.detail.composer.EnhancedPttReceiverService"
+            android:enabled="true"
             android:exported="false"
-            android:foregroundServiceType="specialUse"
-            android:stopWithTask="false">
-            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                      android:value="keepAlive"/>
-        </service>
+            android:foregroundServiceType="mediaPlayback"
+            android:permission="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+
+<!--        <service-->
+<!--            android:name=".core.services.CallKeepAliveService"-->
+<!--            android:exported="false"-->
+<!--            android:foregroundServiceType="specialUse"-->
+<!--            android:stopWithTask="false">-->
+<!--            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"-->
+<!--                      android:value="keepAlive"/>-->
+<!--        </service>-->
 
         <!-- Receivers -->
 
@@ -501,17 +509,17 @@
                 android:resource="@xml/file_paths" />
         </provider>
 
-        <receiver
-            android:name="im.vector.app.core.receivers.BootReceiver"
-            android:exported="true"
-            android:directBootAware="true">
-            <intent-filter>
-                <action android:name="android.intent.action.BOOT_COMPLETED"/>
-                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED"/>
-                <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
-                <action android:name="android.intent.action.USER_UNLOCKED"/>
-            </intent-filter>
-        </receiver>
+<!--        <receiver-->
+<!--            android:name="im.vector.app.core.receivers.BootReceiver"-->
+<!--            android:exported="true"-->
+<!--            android:directBootAware="true">-->
+<!--            <intent-filter>-->
+<!--                <action android:name="android.intent.action.BOOT_COMPLETED"/>-->
+<!--                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED"/>-->
+<!--                <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>-->
+<!--                <action android:name="android.intent.action.USER_UNLOCKED"/>-->
+<!--            </intent-filter>-->
+<!--        </receiver>-->
     </application>
 
 </manifest>

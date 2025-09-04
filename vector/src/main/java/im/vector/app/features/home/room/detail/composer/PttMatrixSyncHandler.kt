@@ -191,7 +191,7 @@ class PttMatrixSyncHandler(
                     Timber.d("Receiver decision: $transportType for speaker $speakerId")
 
                     if (transportType == PttTransportType.TCP) {
-                        startReceiverService(speakerId) // Uses TCP
+                        startEnhancedReceiverService(speakerId) // Uses Enhanced TCP with TURN support
                     } else {
                         // Matrix-based reception
                         matrixReceiver = MatrixPttReceiver(context, session, roomId)
@@ -273,6 +273,36 @@ class PttMatrixSyncHandler(
         }
     }
 
+    /**
+     * Start Enhanced PTT Receiver Service with TURN support
+     */
+    private fun startEnhancedReceiverService(speakerId: String) {
+        Timber.d("🎯 Attempting to start Enhanced receiver service for speaker: $speakerId")
+
+        val senderIp = getSenderIpForUser(speakerId)
+        if (senderIp.isNullOrEmpty()) {
+            Timber.w("❌ Cannot start Enhanced receiver - sender IP is null for user: $speakerId")
+            return
+        }
+
+        val enhancedIntent = Intent(context, EnhancedPttReceiverService::class.java).apply {
+            putExtra("roomId", roomId)
+            putExtra("myUserId", myUserId)
+            putExtra("speakerId", speakerId)
+            putExtra("senderIp", senderIp)
+        }
+        
+        try {
+            context.startService(enhancedIntent)
+            Timber.d("✅ Enhanced PTT Receiver Service started for speaker: $speakerId (IP: $senderIp)")
+        } catch (e: Exception) {
+            Timber.e(e, "❌ Failed to start Enhanced PTT Receiver - falling back to legacy")
+            
+            // Fallback to legacy receiver
+            startReceiverService(speakerId)
+        }
+    }
+
     private fun stopReceiverService() {
         Timber.d("🛑 Stopping PttReceiverService for room=$roomId")
         val intent = Intent(context, PttTcpReceiverService::class.java).apply {
@@ -283,6 +313,17 @@ class PttMatrixSyncHandler(
             Timber.d("✅ PttReceiverService stopped successfully")
         } catch (e: Exception) {
             Timber.e(e, "❌ Failed to stop PttReceiverService")
+        }
+        
+        // Also stop Enhanced PTT Receiver Service
+        val enhancedIntent = Intent(context, EnhancedPttReceiverService::class.java).apply {
+            putExtra("roomId", roomId)
+        }
+        try {
+            context.stopService(enhancedIntent)
+            Timber.d("✅ Enhanced PttReceiverService stopped successfully")
+        } catch (e: Exception) {
+            Timber.e(e, "❌ Failed to stop Enhanced PttReceiverService")
         }
     }
 
