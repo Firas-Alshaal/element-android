@@ -26,6 +26,7 @@ import android.view.ViewGroup
 import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.addCallback
@@ -483,7 +484,7 @@ class TimelineFragment :
 
     @SuppressLint("InflateParams", "ClickableViewAccessibility")
     private fun setupPttButton() {
-        val btnRecord = views.pttAndComposerContainer.findViewById<Button>(R.id.btn_record_original)
+        val btnRecord = views.pttAndComposerContainer.findViewById<ImageView>(R.id.btn_record_original)
         val waveAnimation = views.pttAndComposerContainer.findViewById<LottieAnimationView>(R.id.wave_animation_original)
 
         // Initialize Enhanced PTT Manager (make it accessible in both actions)

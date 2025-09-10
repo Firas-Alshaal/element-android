@@ -480,7 +480,7 @@ class EnhancedPttReceiverService : Service() {
         return NotificationCompat.Builder(this, CHANNEL_ID)
                 .setContentTitle("Enhanced PTT Active")
                 .setContentText("Listening for PTT messages in room")
-                .setSmallIcon(R.drawable.ic_room_profile_notification)
+                .setSmallIcon(R.drawable.ic_notification)
                 .setOngoing(true)
                 .setSilent(true)
                 .setCategory(NotificationCompat.CATEGORY_SERVICE)

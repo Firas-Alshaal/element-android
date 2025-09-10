@@ -30,6 +30,12 @@
         tools:ignore="HardcodedText" />
 
     <item
+        android:id="@+id/menu_home_history"
+        android:icon="@drawable/history_line_icon"
+        android:title="History"
+        app:iconTint="?vctr_content_secondary"
+        app:showAsAction="ifRoom" />
+    <item
         android:id="@+id/menu_home_filter"
         android:icon="@drawable/ic_filter"
         android:title="@string/home_filter_placeholder_home"

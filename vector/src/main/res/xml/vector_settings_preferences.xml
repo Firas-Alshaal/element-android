@@ -13,6 +13,8 @@
             android:title="@string/settings_interface_language"
             app:fragment="im.vector.app.features.settings.locale.LocalePickerFragment" />
 
+        <!-- ORIGINAL CODE - Theme selector commented for custom dark theme enforcement -->
+        <!-- UNCOMMENT TO RESTORE THEME SWITCHING FUNCTIONALITY:
         <im.vector.app.core.preference.VectorListPreference
             android:defaultValue="system"
             android:entries="@array/theme_entries"
@@ -21,6 +23,7 @@
             android:summary="%s"
             android:title="@string/settings_theme"
             app:iconSpaceReserved="false" />
+        -->
 
         <im.vector.app.core.preference.VectorPreference
             android:dialogTitle="@string/font_size"

@@ -2,8 +2,8 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:viewportWidth="512"
     android:viewportHeight="512"
-    android:width="512dp"
-    android:height="512dp"
+    android:width="22dp"
+    android:height="22dp"
     tools:ignore="VectorRaster">
     <path
         android:pathData="M131.5 54L139.5 55L167 78.5L168 84.5L165.5 88L159.5 89L130 64.5L128 59.5L131.5 54Z"

@@ -62,6 +62,9 @@ class VectorSettingsPreferencesFragment :
         // user interface preferences
         setUserInterfacePreferences()
 
+        // ORIGINAL CODE - Theme switching listener commented for custom dark theme enforcement
+        // UNCOMMENT TO RESTORE THEME SWITCHING FUNCTIONALITY:
+        /*
         // Themes
         findPreference<VectorListPreference>(ThemeUtils.APPLICATION_THEME_KEY)!!
                 .onPreferenceChangeListener = Preference.OnPreferenceChangeListener { _, newValue ->
@@ -74,6 +77,7 @@ class VectorSettingsPreferencesFragment :
                 false
             }
         }
+        */
 
         findPreference<VectorSwitchPreference>(VectorPreferences.SETTINGS_PRESENCE_USER_ALWAYS_APPEARS_OFFLINE)!!.let { pref ->
             pref.isChecked = vectorPreferences.userAlwaysAppearsOffline()

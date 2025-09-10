@@ -660,6 +660,11 @@ class HomeActivity :
                 launchQrCode()
                 true
             }
+            R.id.menu_home_history -> {
+                // Open Call History screen
+                startActivity(im.vector.app.features.callhistory.CallHistoryActivity.newIntent(this))
+                true
+            }
             else -> false
         }
     }

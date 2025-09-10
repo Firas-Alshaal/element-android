@@ -37,17 +37,19 @@
             android:layout_width="64dp"
             android:layout_height="64dp"
             android:importantForAccessibility="no"
-            android:src="@drawable/element_logo_green"
+            android:src="@drawable/element_splash_white_foreground"
             android:transitionName="loginLogoTransition" />
 
-        <ImageView
+        <TextView
             android:id="@+id/logoType"
             android:layout_width="wrap_content"
+            app:tint="?colorSecondary"
             android:layout_height="44dp"
             android:layout_marginTop="8dp"
-            android:contentDescription="@string/app_name"
-            android:src="@drawable/element_logotype"
-            app:tint="?colorSecondary"
+            android:text="Murijeb"
+            android:textColor="#2A2A4D"
+            android:textSize="30sp"
+            android:textStyle="bold"
             tools:ignore="MissingPrefix" />
 
     </LinearLayout>

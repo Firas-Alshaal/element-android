@@ -3,12 +3,15 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="match_parent"
+    android:background="@drawable/bg_drawable">
 
     <com.google.android.material.appbar.AppBarLayout
         android:id="@+id/appBarLayout"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:background="@android:color/transparent"
+        app:elevation="0dp"
         app:layout_constraintTop_toTopOf="parent">
 
         <im.vector.app.core.ui.views.CurrentCallsView
@@ -23,7 +26,8 @@
         <com.google.android.material.appbar.MaterialToolbar
             android:id="@+id/groupToolbar"
             android:layout_width="match_parent"
-            android:layout_height="?attr/actionBarSize">
+            android:layout_height="?attr/actionBarSize"
+            android:background="@android:color/transparent">
 
             <LinearLayout
                 android:layout_width="match_parent"

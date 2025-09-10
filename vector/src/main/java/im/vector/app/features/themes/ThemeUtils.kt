@@ -38,7 +38,10 @@ object ThemeUtils {
     private const val THEME_BLACK_VALUE = "black"
 
     // The default theme
-    private const val DEFAULT_THEME = SYSTEM_THEME_VALUE
+    // ORIGINAL CODE - Reverted for future use:
+    // private const val DEFAULT_THEME = SYSTEM_THEME_VALUE
+    // CUSTOM: Force dark theme always
+    private const val DEFAULT_THEME = THEME_BLACK_VALUE
 
     private var currentTheme = AtomicReference<String>(null)
 
@@ -74,8 +77,11 @@ object ThemeUtils {
      * @return the selected application theme
      */
     fun getApplicationTheme(context: Context): String {
+        Timber.d("Context received: $context")
         val currentTheme = this.currentTheme.get()
         return if (currentTheme == null) {
+            // ORIGINAL CODE - Commented for future use:
+            /*
             val prefs = PreferenceManager.getDefaultSharedPreferences(context.applicationContext)
             var themeFromPref = prefs.getString(APPLICATION_THEME_KEY, DEFAULT_THEME) ?: DEFAULT_THEME
             if (themeFromPref == "status") {
@@ -85,8 +91,13 @@ object ThemeUtils {
             }
             this.currentTheme.set(themeFromPref)
             themeFromPref
+            */
+            // CUSTOM: Always force black theme
+            this.currentTheme.set(THEME_BLACK_VALUE)
+            THEME_BLACK_VALUE
         } else {
-            currentTheme
+            // CUSTOM: Always return black theme regardless of stored preference
+            THEME_BLACK_VALUE
         }
     }
 

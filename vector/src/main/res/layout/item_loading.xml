@@ -3,7 +3,7 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:background="?android:colorBackground"
+    android:background="@android:color/transparent"
     android:minHeight="1dp"
     android:orientation="vertical"
     tools:viewBindingIgnore="true">
@@ -16,7 +16,7 @@
         android:layout_gravity="center"
         android:layout_margin="@dimen/layout_vertical_margin"
         android:gravity="center"
-        android:textColor="?vctr_content_primary"
+        android:textColor="?vctr_content_secondary"
         tools:text="Waiting message" />
 
     <ProgressBar

@@ -3,7 +3,8 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="match_parent"
+    android:background="@drawable/bg_drawable">
 
     <im.vector.app.core.ui.views.KeysBackupBanner
         android:id="@+id/homeKeysBackupBanner"
@@ -45,7 +46,9 @@
             android:id="@+id/appBarLayout"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:background="@android:color/transparent"
             android:fitsSystemWindows="true"
+            app:elevation="0dp"
             app:layout_constraintTop_toBottomOf="@id/syncStateView">
 
             <com.google.android.material.appbar.CollapsingToolbarLayout
@@ -59,9 +62,31 @@
                     android:id="@+id/toolbar"
                     android:layout_width="match_parent"
                     android:layout_height="?attr/actionBarSize"
+                    android:background="@android:color/transparent"
                     android:elevation="0dp"
                     app:layout_collapseMode="pin"
                     tools:title="@string/all_chats">
+
+                    <!-- App Logo -->
+                    <FrameLayout
+                        android:layout_width="30dp"
+                        android:layout_height="30dp"
+                        android:layout_marginStart="8dp"
+                        android:layout_marginEnd="8dp"
+                        android:layout_gravity="center_vertical"
+                        android:elevation="4dp">
+
+                        <ImageView
+                            android:id="@+id/appLogoImageView"
+                            android:layout_width="28dp"
+                            android:layout_height="28dp"
+                            android:layout_gravity="center"
+                            android:src="@drawable/launch_icon"
+                            android:contentDescription="App Logo"
+                            android:scaleType="centerInside"
+                            app:tint="#FFFFFF" />
+
+                    </FrameLayout>
 
                     <ImageView
                         android:id="@+id/avatar"

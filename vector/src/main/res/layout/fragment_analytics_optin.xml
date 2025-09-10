@@ -37,7 +37,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:importantForAccessibility="no"
-        android:src="@drawable/element_logo_stars" />
+        android:src="@drawable/element_splash_white_foreground" />
 
     <TextView
         android:id="@+id/title"
