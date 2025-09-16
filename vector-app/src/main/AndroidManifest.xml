@@ -92,10 +92,10 @@
             android:exported="false"
             android:foregroundServiceType="mediaPlayback" />
 
-<!--        <service-->
-<!--            android:name="im.vector.app.features.home.room.detail.composer.UdpWakeListenerService"-->
-<!--            android:exported="false"-->
-<!--            android:foregroundServiceType="connectedDevice" />-->
+        <service
+            android:name="im.vector.app.features.home.room.detail.composer.UdpWakeListenerService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
 
         <receiver
             android:name="im.vector.app.push.fcm.NotificationDismissReceiver"

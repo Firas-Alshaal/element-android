@@ -133,7 +133,8 @@ class EnhancedPttVoiceMessageHelper @Inject constructor(
     private fun createWavFile(pcmData: ByteArray, sampleRate: Int, channels: Int, bitsPerSample: Int): ByteArray {
         val dataSize = pcmData.size
         val totalSize = dataSize + 44 - 8
-        
+        Timber.d("🎵 Creating WAV file: ${dataSize} bytes PCM, ${sampleRate}Hz, ${channels}ch, ${bitsPerSample}bit")
+
         val header = ByteArray(44)
         
         // RIFF header
@@ -207,7 +208,8 @@ class EnhancedPttVoiceMessageHelper @Inject constructor(
         header[41] = ((dataSize shr 8) and 0xff).toByte()
         header[42] = ((dataSize shr 16) and 0xff).toByte()
         header[43] = ((dataSize shr 24) and 0xff).toByte()
-        
+        Timber.d("✅ WAV file created: ${header.size + pcmData.size} bytes total")
+
         // Combine header and data
         return header + pcmData
     }
@@ -219,7 +221,12 @@ class EnhancedPttVoiceMessageHelper @Inject constructor(
         val bytesPerSample = bitsPerSample / 8
         val totalSamples = audioData.size / (channels * bytesPerSample)
         val durationSeconds = totalSamples.toDouble() / sampleRate
-        return (durationSeconds * 1000).toLong() // Convert to milliseconds
+        val durationMs = (durationSeconds * 1000).toLong() // Convert to milliseconds
+
+        // ✅ إصلاح: التأكد من أن المدة صحيحة
+        Timber.d("🎵 Audio duration calculation: ${audioData.size} bytes, ${totalSamples} samples, ${durationMs}ms")
+
+        return durationMs
     }
 
     /**

@@ -48,6 +48,7 @@ import im.vector.app.features.analytics.VectorAnalytics
 import im.vector.app.features.analytics.plan.SuperProperties
 import im.vector.app.features.call.webrtc.WebRtcCallManager
 import im.vector.app.features.configuration.VectorConfiguration
+import im.vector.app.features.home.room.detail.composer.GlobalPttManagerHolder
 import im.vector.app.features.invite.InvitesAcceptor
 import im.vector.app.features.lifecycle.VectorActivityLifecycleCallbacks
 import im.vector.app.features.notifications.NotificationDrawerManager
@@ -256,7 +257,20 @@ class VectorApplication :
                 }
             }
         })
-        
+
+        // Start UDP Wake Listener Service only if user is logged in
+        if (activeSessionHolder.hasActiveSession()) {
+            try {
+                val udpWakeIntent = Intent(this, im.vector.app.features.home.room.detail.composer.UdpWakeListenerService::class.java)
+                androidx.core.content.ContextCompat.startForegroundService(this, udpWakeIntent)
+                Timber.d("📱 ✅ UDP Wake Listener Service started - PTT background listening enabled")
+            } catch (e: Exception) {
+                Timber.e(e, "❌ CRITICAL: Failed to start UDP Wake Listener Service")
+            }
+        } else {
+            Timber.d("📱 ⏸️ UDP Wake Listener Service not started - no active session")
+        }
+
         // Start keep-alive service to ensure FCM works for calls
         try {
             val keepAliveIntent = Intent(this, im.vector.app.core.services.CallKeepAliveService::class.java)

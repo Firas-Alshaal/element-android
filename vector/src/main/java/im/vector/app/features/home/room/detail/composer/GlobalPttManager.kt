@@ -1,11 +1,10 @@
+package im.vector.app.features.home.room.detail.composer
+
 import android.content.Context
 import android.content.Intent
 import android.os.Handler
 import android.os.Looper
 import androidx.lifecycle.asFlow
-import im.vector.app.features.home.room.detail.composer.PttMatrixSyncHandler
-import im.vector.app.features.home.room.detail.composer.PttTcpReceiverService
-import im.vector.app.features.home.room.detail.composer.EnhancedPttReceiverService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -109,32 +108,17 @@ class GlobalPttManager(
                             Timber.w("🚫 لا صلاحية لنشر IP إلى $roomId (userLevel=$userLevel < required=$requiredLevel)")
                         }
 
-                        // ✅ ENHANCED PTT: Pre-start Enhanced receiver service for INSTANT readiness
-                        val enhancedPreStartIntent = Intent(context, EnhancedPttReceiverService::class.java).apply {
+                        val legacyPreStartIntent = Intent(context, PttTcpReceiverService::class.java).apply {
                             putExtra("roomId", roomId)
                             putExtra("myUserId", session.myUserId)
                             putExtra("senderIp", myIp)
-                            putExtra("speakerId", "PRESTART") // Special flag for pre-start
+                            putExtra("speakerId", "PRESTART")
                         }
                         try {
-                            context.startService(enhancedPreStartIntent)
+                            context.startService(legacyPreStartIntent)
                             Timber.d("🚀 Enhanced PTT Receiver pre-started for room $roomId")
                         } catch (e: Exception) {
-                            Timber.e(e, "❌ Failed to pre-start Enhanced PTT Receiver for room $roomId")
-                            
-                            // Fallback to legacy receiver
-                            val legacyPreStartIntent = Intent(context, PttTcpReceiverService::class.java).apply {
-                                putExtra("roomId", roomId)
-                                putExtra("myUserId", session.myUserId)
-                                putExtra("senderIp", myIp)
-                                putExtra("speakerId", "PRESTART")
-                            }
-                            try {
-                                context.startService(legacyPreStartIntent)
-                                Timber.d("🚀 Legacy PTT Receiver pre-started as fallback for room $roomId")
-                            } catch (fallbackException: Exception) {
-                                Timber.e(fallbackException, "❌ Both Enhanced and Legacy PTT Receiver pre-start failed for room $roomId")
-                            }
+
                         }
 
                         startedRooms.add(roomId)

@@ -76,8 +76,10 @@ class ActiveSessionHolder @Inject constructor(
 
         // **SESSION-BASED SERVICE**: Start keep-alive service when user logs in
         startKeepAliveService(session)
+        // **SESSION-BASED SERVICE**: Start UDP wake listener service when user logs in
+        startUdpWakeListenerService(session)
         im.vector.app.core.watchdog.ServiceWatchdogWorker.schedule(context)
-        Timber.w("ActiveSessionHolder: session=${session.myUserId} → keepAlive + watchdog scheduled")
+        Timber.w("ActiveSessionHolder: session=${session.myUserId} → keepAlive + UDP wake listener + watchdog scheduled")
     }
 
     suspend fun clearActiveSession() {
@@ -89,6 +91,8 @@ class ActiveSessionHolder @Inject constructor(
 
             // **SESSION-BASED SERVICE**: Stop keep-alive service when user logs out
             stopKeepAliveService(it)
+            // **SESSION-BASED SERVICE**: Stop UDP wake listener service when user logs out
+            stopUdpWakeListenerService(it)
         }
 
         activeSessionReference.set(null)
@@ -164,6 +168,19 @@ class ActiveSessionHolder @Inject constructor(
     }
 
     /**
+     * **SESSION-BASED SERVICE**: Start UDP wake listener service when user logs in
+     */
+    private fun startUdpWakeListenerService(session: Session) {
+        try {
+            val intent = Intent(context, im.vector.app.features.home.room.detail.composer.UdpWakeListenerService::class.java)
+            ContextCompat.startForegroundService(context, intent)
+            Timber.w("🎧 UDP Wake Listener service started for user login: ${session.myUserId}")
+        } catch (e: Exception) {
+            Timber.e(e, "❌ Failed to start UDP Wake Listener service for user login: ${session.myUserId}")
+        }
+    }
+
+    /**
      * Ensure FCM pushers are registered when service starts
      * This prevents notification issues after service restart
      */
@@ -193,6 +210,19 @@ class ActiveSessionHolder @Inject constructor(
             Timber.w("🚪 Keep-alive service stopped for user logout: ${session.myUserId}")
         } catch (e: Exception) {
             Timber.e(e, "❌ Failed to stop keep-alive service for user logout: ${session.myUserId}")
+        }
+    }
+
+    /**
+     * **SESSION-BASED SERVICE**: Stop UDP wake listener service when user logs out
+     */
+    private fun stopUdpWakeListenerService(session: Session) {
+        try {
+            val intent = Intent(context, im.vector.app.features.home.room.detail.composer.UdpWakeListenerService::class.java)
+            context.stopService(intent)
+            Timber.w("🚪 UDP Wake Listener service stopped for user logout: ${session.myUserId}")
+        } catch (e: Exception) {
+            Timber.e(e, "❌ Failed to stop UDP Wake Listener service for user logout: ${session.myUserId}")
         }
     }
 

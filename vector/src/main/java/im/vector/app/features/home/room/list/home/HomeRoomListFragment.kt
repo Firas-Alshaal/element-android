@@ -14,13 +14,10 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.Toast
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.ConcatAdapter
-import kotlinx.coroutines.delay
-import im.vector.app.features.home.room.detail.composer.PttMatrixSyncHandler
 import androidx.recyclerview.widget.ConcatAdapter.Config.StableIdMode
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.airbnb.epoxy.OnModelBuildFinishedListener
@@ -34,14 +31,10 @@ import im.vector.app.core.platform.StateView
 import im.vector.app.core.platform.VectorBaseFragment
 import im.vector.app.core.resources.UserPreferencesProvider
 import im.vector.app.core.utils.FirstItemUpdatedObserver
-import im.vector.app.core.utils.toast
 import im.vector.app.databinding.FragmentRoomListBinding
 import im.vector.app.features.analytics.plan.ViewRoom
-import im.vector.app.features.home.room.detail.composer.PttManager
-import im.vector.app.features.home.room.detail.composer.PttTcpReceiverService
 import im.vector.app.features.home.room.list.RoomListAnimator
 import im.vector.app.features.home.room.list.RoomListListener
-import im.vector.app.features.home.room.list.RoomSummaryItem
 import im.vector.app.features.home.room.list.actions.RoomListQuickActionsBottomSheet
 import im.vector.app.features.home.room.list.actions.RoomListQuickActionsSharedAction
 import im.vector.app.features.home.room.list.actions.RoomListQuickActionsSharedActionViewModel
@@ -49,22 +42,12 @@ import im.vector.app.features.home.room.list.home.header.HomeRoomFilter
 import im.vector.app.features.home.room.list.home.header.HomeRoomsHeadersController
 import im.vector.app.features.home.room.list.home.invites.InvitesActivity
 import im.vector.lib.strings.CommonStrings
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import org.matrix.android.sdk.api.query.QueryStringValue
-import org.matrix.android.sdk.api.session.events.model.toModel
-import org.matrix.android.sdk.api.session.getRoom
-import org.matrix.android.sdk.api.session.room.model.PowerLevelsContent
 import org.matrix.android.sdk.api.session.room.model.RoomSummary
 import org.matrix.android.sdk.api.session.room.model.SpaceChildInfo
 import org.matrix.android.sdk.api.session.room.model.tag.RoomTag
 import org.matrix.android.sdk.api.session.room.notification.RoomNotificationState
-import timber.log.Timber
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -89,11 +72,6 @@ class HomeRoomListFragment :
 
     private lateinit var stateRestorer: LayoutManagerStateRestorer
 
-    private val pttManager: PttManager? by lazy {
-        activeSessionHolder.getSafeActiveSession()?.let {
-            PttManager(requireContext(), it)
-        }
-    }
     @Inject lateinit var activeSessionHolder: ActiveSessionHolder
 
     private lateinit var permissionLauncher: ActivityResultLauncher<Array<String>>
@@ -101,83 +79,6 @@ class HomeRoomListFragment :
 
     override fun getBinding(inflater: LayoutInflater, container: ViewGroup?): FragmentRoomListBinding {
         return FragmentRoomListBinding.inflate(inflater, container, false)
-    }
-
-    override fun onStartPtt(roomId: String) {
-        Timber.d("🎙️ Start PTT streaming for room: $roomId")
-        
-        // ✅ POLICE RADIO PROTOCOL: Check if channel is busy
-        val session = activeSessionHolder.getActiveSession()
-        val (isBusy, currentSpeaker) = PttMatrixSyncHandler.isChannelBusy(roomId, session.myUserId)
-        if (isBusy && currentSpeaker != null) {
-            context?.toast("🚫 Channel busy - $currentSpeaker is speaking")
-            Timber.w("🚫 POLICE RADIO: Channel busy - $currentSpeaker is speaking")
-            return
-        }
-        
-        try {
-            // Stop any existing receiver service immediately
-            val stopIntent = Intent(requireContext(), PttTcpReceiverService::class.java).apply {
-                putExtra("roomId", roomId)
-            }
-            requireContext().stopService(stopIntent)
-            
-            // ✅ COORDINATE PTT START: Send Matrix event first, then wait before audio
-            sendPttStatus(roomId, "talking")
-            
-            CoroutineScope(Dispatchers.IO).launch {
-                try {
-                    // Wait for Matrix event to propagate
-                    delay(500)
-                    pttManager?.startStreamingCoordinated(roomId)
-                } catch (e: Exception) {
-                    Timber.e(e, "❌ Failed to start PTT for room: $roomId")
-                }
-            }
-        } catch (e: Exception) {
-            Timber.e(e, "❌ Error starting PTT for room: $roomId")
-        }
-    }
-
-    override fun onStopPtt(roomId: String) {
-        Timber.d("🛑 Stop PTT streaming for room: $roomId")
-        // ✅ POLICE RADIO PROTOCOL: Release speaking floor and send Matrix idle status
-        val session = activeSessionHolder.getActiveSession()
-        PttMatrixSyncHandler.releaseSpeakingFloor(roomId, session.myUserId)
-        
-        pttManager?.stopStreaming()
-        sendPttStatus(roomId, "idle")
-    }
-
-    private fun sendPttStatus(roomId: String, status: String) {
-        val session = activeSessionHolder.getActiveSession()
-
-        val content = mapOf(
-                "status" to status,
-                "userId" to session.myUserId
-        )
-
-        val room = session.getRoom(roomId) ?: return
-
-        // Use viewLifecycleOwner.lifecycleScope to ensure proper lifecycle management
-        viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO + SupervisorJob()) {
-            try {
-                room.stateService().sendStateEvent("ptt.status", session.myUserId, content)
-            } catch (e: Exception) {
-                // Handle permission errors gracefully - don't crash the app
-                when {
-                    e.message?.contains("M_FORBIDDEN") == true -> {
-                        Timber.w("⚠️ User doesn't have permission to send PTT status: ${e.message}")
-                    }
-                    e.message?.contains("user_level") == true -> {
-                        Timber.w("⚠️ User level too low for PTT status: ${e.message}")
-                    }
-                    else -> {
-                        Timber.e(e, "❌ Failed to send ptt.status: ${e.message}")
-                    }
-                }
-            }
-        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -196,56 +97,11 @@ class HomeRoomListFragment :
         views.stateView.state = StateView.State.Loading
         setupObservers()
         setupRecyclerView()
-        
-        // ✅ Set up global timeout callback for wave animation
-        PttManager.setGlobalTimeoutCallback { roomId ->
-            requireActivity().runOnUiThread {
-                Timber.d("⏰ Global PTT timeout occurred for room: $roomId")
-                handlePttTimeout(roomId)
-            }
-        }
     }
 
     override fun requestVoicePermission(context: Context, callback: (Boolean) -> Unit) {
         permissionGrantedCallback = callback
         permissionLauncher.launch(arrayOf(Manifest.permission.RECORD_AUDIO))
-    }
-
-    override fun checkPttPermissionAndStart(roomId: String, callback: (Boolean) -> Unit) {
-        Timber.d("🔍 Checking PTT permission for room: $roomId")
-
-        val session = activeSessionHolder.getActiveSession()
-        val room = session.getRoom(roomId) ?: return
-
-        CoroutineScope(Dispatchers.IO).launch {
-            try {
-                val stateKey = QueryStringValue.Equals("", QueryStringValue.Case.SENSITIVE)
-                val powerLevelsEvent = room.stateService().getStateEvent("m.room.power_levels", stateKey)
-                val powerLevels = powerLevelsEvent?.content?.toModel<PowerLevelsContent>()
-
-                val userLevel = powerLevels?.users?.get(session.myUserId) ?: powerLevels?.usersDefault ?: 0
-                val requiredLevel = powerLevels?.events?.get("ptt.status") ?: powerLevels?.stateDefault ?: 50
-
-                Timber.d("🔍 User level: $userLevel, Required level: $requiredLevel")
-
-                withContext(Dispatchers.Main) {
-                    if (userLevel >= requiredLevel) {
-                        Timber.d("✅ User has PTT permission")
-                        callback(true) // ✅ يملك الصلاحية
-                    } else {
-                        Timber.w("❌ User doesn't have PTT permission")
-                        Toast.makeText(context, "You don't have permission to send voice in this room", Toast.LENGTH_LONG).show()
-                        callback(false) // ❌ لا يملك الصلاحية
-                    }
-                }
-            } catch (e: Exception) {
-                Timber.e(e, "❌ Error checking PTT permission")
-                withContext(Dispatchers.Main) {
-                    Toast.makeText(context, "Error checking permissions", Toast.LENGTH_SHORT).show()
-                    callback(false)
-                }
-            }
-        }
     }
 
     override fun onStart() {
@@ -404,9 +260,6 @@ class HomeRoomListFragment :
 
         concatAdapter.unregisterAdapterDataObserver(firstItemObserver)
 
-        // ✅ Clear global timeout callback
-        PttManager.clearGlobalTimeoutCallback()
-        
         super.onDestroyView()
     }
 
@@ -431,24 +284,6 @@ class HomeRoomListFragment :
     override fun onJoinSuggestedRoom(room: SpaceChildInfo) = Unit
 
     override fun onSuggestedRoomClicked(room: SpaceChildInfo) = Unit
-
-    override fun onPttTimeout(roomId: String) {
-        Timber.d("⏰ PTT timeout for room: $roomId")
-        // ✅ POLICE RADIO PROTOCOL: Release speaking floor and send Matrix idle status
-        val session = activeSessionHolder.getActiveSession()
-        PttMatrixSyncHandler.releaseSpeakingFloor(roomId, session.myUserId)
-        
-        pttManager?.stopStreaming()
-        sendPttStatus(roomId, "idle")
-    }
-
-    private fun handlePttTimeout(roomId: String) {
-        Timber.d("⏰ Handling PTT timeout for room: $roomId")
-        // ✅ Stop wave animation using the static method
-        RoomSummaryItem.stopWaveAnimationForRoom(roomId)
-        // ✅ Also handle the timeout through the existing mechanism
-        onPttTimeout(roomId)
-    }
 
     // endregion
 }

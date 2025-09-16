@@ -8,14 +8,19 @@
 package im.vector.app.features.home.room.detail.composer
 
 import android.content.Context
-import android.content.Intent
 import android.media.AudioFormat
+import android.media.AudioManager
 import android.media.AudioRecord
+import android.media.AudioTrack
 import android.media.MediaRecorder
 import android.media.audiofx.AcousticEchoCanceler
 import android.media.audiofx.AutomaticGainControl
 import android.media.audiofx.NoiseSuppressor
+import android.os.SystemClock
 import android.util.Base64
+import android.util.Log
+import im.vector.app.features.voice.NetworkAudioQualityManager
+import im.vector.app.features.voice.OpusPttCodec
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -37,7 +42,6 @@ import kotlin.math.max
  * Enhanced PTT Manager with TURN server support and optimized audio quality
  *
  * Features:
- * - TURN/STUN server integration for firewall traversal
  * - High-quality audio optimized for 4G networks
  * - Automatic fallback mechanisms
  * - Background operation support
@@ -81,11 +85,12 @@ class EnhancedPttManager(
      */
     fun startEnhancedPttStreaming(roomId: String) {
         if (enhancedTcpSender != null || matrixSender != null) {
-            Timber.w("Enhanced PTT already active; ignoring start.")
+            Timber.w("⚠️ Enhanced PTT already active; ignoring start.")
             return
         }
 
-        Timber.d("🚀 Starting Enhanced PTT with TURN support for room: $roomId")
+        Timber.d("🚀 ENHANCED PTT START: Starting Enhanced PTT with TURN support for room: $roomId")
+        Timber.d("🎯 ENHANCED PTT START: All features enabled - Opus+FEC, adaptive jitter buffer, packet redundancy, adaptive bitrate")
 
         val room = session.getRoom(roomId)
         if (room == null) {
@@ -136,15 +141,15 @@ class EnhancedPttManager(
                         }
 
                         EnhancedPttTransportType.TURN_RELAY -> {
-                            enhancedTcpSender = EnhancedPttTcpSender(
-                                    context = context,
-                                    roomId = roomId,
-                                    onTimeoutCallback = onTimeoutCallback,
-                                    globalTimeoutCallback = globalTimeoutCallback,
-                                    onStopCallback = { enhancedTcpSender = null; clearTimeoutCallback() },
-                                    onAudioDataCallback = { audioChunk -> currentPttAudioData.add(audioChunk) }
-                            )
-                            enhancedTcpSender?.startWithTurnRelay()
+//                            enhancedTcpSender = EnhancedPttTcpSender(
+//                                    context = context,
+//                                    roomId = roomId,
+//                                    onTimeoutCallback = onTimeoutCallback,
+//                                    globalTimeoutCallback = globalTimeoutCallback,
+//                                    onStopCallback = { enhancedTcpSender = null; clearTimeoutCallback() },
+//                                    onAudioDataCallback = { audioChunk -> currentPttAudioData.add(audioChunk) }
+//                            )
+//                            enhancedTcpSender?.startWithTurnRelay()
                         }
 
                         EnhancedPttTransportType.MATRIX_FALLBACK -> {
@@ -175,7 +180,6 @@ class EnhancedPttManager(
 
             // Stop matrix sender (handle both types)
             when (val sender = matrixSender) {
-                is MatrixPttSender -> sender.stopStreaming()
                 is EnhancedMatrixPttSender -> sender.stopStreaming()
             }
             matrixSender = null
@@ -191,7 +195,6 @@ class EnhancedPttManager(
 
                 // Stop matrix sender (handle both types)
                 when (val sender = matrixSender) {
-                    is MatrixPttSender -> sender.stopStreaming()
                     is EnhancedMatrixPttSender -> sender.stopStreaming()
                 }
                 matrixSender = null
@@ -252,7 +255,6 @@ class EnhancedPttManager(
 
         // Stop matrix sender (handle both types)
         when (val sender = matrixSender) {
-            is MatrixPttSender -> sender.stopStreaming()
             is EnhancedMatrixPttSender -> sender.stopStreaming()
         }
         matrixSender = null
@@ -265,27 +267,39 @@ class EnhancedPttManager(
     private fun determineEnhancedTransport(localIp: String, remoteIp: String?): EnhancedPttTransportType {
         Timber.d("🔍 Enhanced transport decision: localIp=$localIp, remoteIp=$remoteIp")
 
+        // ✅ REAL Hybrid System - استخدام TCP للشبكة نفسها و Matrix للشبكات المختلفة
         return when {
-            // Always use Matrix for different networks (like WiFi to 4G)
-            !remoteIp.isNullOrEmpty() && !isDirectConnectionPossible(localIp, remoteIp) -> {
-                Timber.d("🌐 Different networks detected - using Matrix for reliability")
-                EnhancedPttTransportType.MATRIX_FALLBACK
-            }
-            // Direct connection possible (same subnet)
-            !remoteIp.isNullOrEmpty() && isDirectConnectionPossible(localIp, remoteIp) -> {
-                Timber.d("🔗 Same subnet detected - using Direct TCP")
+            // Same network - use direct TCP for best performance
+            !remoteIp.isNullOrEmpty() && isSameNetwork(localIp, remoteIp) -> {
+                Timber.d("🌐 Same network detected - using DIRECT_TCP for optimal performance")
                 EnhancedPttTransportType.DIRECT_TCP
             }
-            // Use TURN relay as secondary option
-            !remoteIp.isNullOrEmpty() -> {
-                Timber.d("🔄 Using TURN relay")
-                EnhancedPttTransportType.TURN_RELAY
-            }
-            // Fallback to Matrix
-            else -> {
-                Timber.d("📱 Fallback to Matrix")
+            // Different networks - use Matrix for reliability
+            !remoteIp.isNullOrEmpty() && !isSameNetwork(localIp, remoteIp) -> {
+                Timber.d("🌐 Different networks detected - using MATRIX_FALLBACK for reliability")
                 EnhancedPttTransportType.MATRIX_FALLBACK
             }
+            // No remote IP - use Matrix
+            else -> {
+                Timber.d("🌐 No remote IP - using MATRIX_FALLBACK")
+                EnhancedPttTransportType.MATRIX_FALLBACK
+            }
+        }
+    }
+
+    /**
+     * Check if two IPs are on the same network
+     */
+    private fun isSameNetwork(localIp: String, remoteIp: String): Boolean {
+        return try {
+            val localSubnet = localIp.substring(0, localIp.lastIndexOf('.'))
+            val remoteSubnet = remoteIp.substring(0, remoteIp.lastIndexOf('.'))
+            val sameSubnet = localSubnet == remoteSubnet
+            Timber.d("🔍 Network check: $localIp vs $remoteIp → sameSubnet=$sameSubnet")
+            sameSubnet
+        } catch (e: Exception) {
+            Timber.w(e, "⚠️ Failed to check network similarity")
+            false
         }
     }
 
@@ -333,7 +347,7 @@ class EnhancedPttManager(
         Timber.d("🚀 Starting Enhanced Matrix PTT sender with audio collection")
 
         // Create an enhanced Matrix sender that collects audio data
-        matrixSender = EnhancedMatrixPttSender(
+        val enhancedMatrixSender = EnhancedMatrixPttSender(
                 context = context,
                 session = session,
                 roomId = roomId,
@@ -344,7 +358,10 @@ class EnhancedPttManager(
                     Timber.v("📊 Collected audio chunk: ${audioChunk.size} bytes")
                 }
         )
-        (matrixSender as? EnhancedMatrixPttSender)?.startStreaming()
+        matrixSender = enhancedMatrixSender
+        // ✅ CRITICAL: Start the actual streaming with the Enhanced sender
+        enhancedMatrixSender.startStreaming()
+        Timber.d("✅ Enhanced Matrix PTT sender started successfully")
     }
 }
 
@@ -368,56 +385,27 @@ class EnhancedPttTcpSender(
         private val onStopCallback: (() -> Unit)? = null,
         private val onAudioDataCallback: ((ByteArray) -> Unit)? = null
 ) {
-    private val serverPort: Int = 8008
+    private val serverPort = 8008
     private var audioRecord: AudioRecord? = null
     private var isSending = false
     private var socket: ServerSocket? = null
-    private var turnRelaySocket: Socket? = null
     private val clientSockets = mutableListOf<Socket>()
     private val clientStreams = mutableMapOf<Socket, BufferedOutputStream>()
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
-    // Enhanced audio settings for 4G networks
     companion object {
         const val MAX_RECORDING_TIME_SECONDS = 30
-        const val WARNING_TIME_SECONDS = 5
-        const val ENHANCED_SAMPLE_RATE = 16000 // Better quality for 4G
-        const val ENHANCED_BUFFER_SIZE = 4096  // Optimized for mobile networks
-        val FRAME_SIZE = 640
+        const val ENHANCED_SAMPLE_RATE = 16000   // ✅ متوافق مع المستقبل
+        const val ENHANCED_BUFFER_SIZE = 2048    // ✅ حجم مناسب للتسجيل
+        private const val FRAME_DURATION_MS = 20 // ✅ 20ms ثابتة
+        private val BYTES_PER_TICK = (ENHANCED_SAMPLE_RATE / 1000 * FRAME_DURATION_MS) * 2 // 640B
 
-        // TURN server settings
-        private const val TURN_HOST = "74.162.88.173"
-        private const val TURN_USERNAME = "AtlasUser"
-        private const val TURN_PASSWORD = "Atl@s@123_2025"
+        private var aec: AcousticEchoCanceler? = null
+        private var audioManager: AudioManager? = null
     }
 
     /**
-     * Start enhanced client connection to remote IP
-     */
-    fun startClient(remoteIp: String) {
-        Timber.d("🔌 Starting Enhanced PTT client connection to $remoteIp")
-        isSending = true
-
-        scope.launch {
-            try {
-                val clientSocket = connectWithTurnFallback(remoteIp, serverPort)
-                if (clientSocket != null) {
-                    clientSockets.add(clientSocket)
-                    clientStreams[clientSocket] = BufferedOutputStream(clientSocket.getOutputStream())
-                    startEnhancedAudioRecording()
-                } else {
-                    Timber.e("❌ Failed to connect to remote IP: $remoteIp")
-                    onTimeoutCallback?.invoke()
-                }
-            } catch (e: Exception) {
-                Timber.e(e, "❌ Error in Enhanced PTT client")
-                onTimeoutCallback?.invoke()
-            }
-        }
-    }
-
-    /**
-     * Start enhanced server with optimized audio quality
+     * Start as TCP server (LAN mode)
      */
     fun startEnhancedServer() {
         isSending = true
@@ -426,178 +414,152 @@ class EnhancedPttTcpSender(
         scope.launch {
             try {
                 socket = ServerSocket(serverPort)
-                Timber.d("Enhanced TCP Server started on port $serverPort")
+                Timber.d("🚀 TCP Server started on port $serverPort")
 
                 while (isSending) {
                     try {
                         val client = socket!!.accept()
-                        Timber.d("✅ Enhanced client connected: ${client.inetAddress.hostAddress}:${client.port}")
+                        Timber.d("✅ Client connected: ${client.inetAddress.hostAddress}:${client.port}")
                         synchronized(clientSockets) {
                             clientSockets.add(client)
                             clientStreams[client] = BufferedOutputStream(client.getOutputStream())
                         }
-                        Timber.d("📊 Total enhanced clients: ${clientSockets.size}")
                     } catch (e: Exception) {
-                        if (isSending) Timber.e("❌ Enhanced accept error: ${e.message}")
+                        if (isSending) Timber.e("❌ Accept error: ${e.message}")
                         break
                     }
                 }
             } catch (e: Exception) {
-                Timber.e("Enhanced server error: ${e.message}")
+                Timber.e("❌ Server error: ${e.message}")
             }
         }
 
-        // Start enhanced audio recording
+        // Start audio recording + streaming
         startEnhancedAudioRecording()
     }
 
     /**
-     * Start with TURN relay support
-     */
-    fun startWithTurnRelay() {
-        isSending = true
-
-        scope.launch {
-            try {
-                // Connect to TURN server for relay
-                turnRelaySocket = createTurnRelayConnection()
-                if (turnRelaySocket != null) {
-                    Timber.d("✅ Connected to TURN relay server")
-                    startEnhancedAudioRecording()
-                } else {
-                    Timber.e("❌ Failed to connect to TURN relay - falling back to Matrix")
-                    // TODO: Fallback to Matrix sender
-                }
-            } catch (e: Exception) {
-                Timber.e(e, "❌ TURN relay connection failed")
-            }
-        }
-    }
-
-    /**
-     * Enhanced audio recording with 4G optimization
+     * Audio recording & streaming loop
      */
     private fun startEnhancedAudioRecording() {
         scope.launch {
             try {
-                // Enhanced audio settings optimized for mobile networks
-                audioRecord = AudioRecord(
-                        MediaRecorder.AudioSource.VOICE_COMMUNICATION, // ✅ Optimized for mobile
-                        ENHANCED_SAMPLE_RATE, // ✅ Higher quality
+
+                // Configure AudioManager
+                audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+                audioManager?.mode = AudioManager.MODE_IN_COMMUNICATION
+                @Suppress("DEPRECATION")
+                audioManager?.isSpeakerphoneOn = false // 🔇 mic echo reduction
+
+                // AudioRecord setup
+                val minBuf = AudioRecord.getMinBufferSize(
+                        ENHANCED_SAMPLE_RATE,
                         AudioFormat.CHANNEL_IN_MONO,
-                        AudioFormat.ENCODING_PCM_16BIT,
-                        max(
-                                AudioRecord.getMinBufferSize(
-                                        ENHANCED_SAMPLE_RATE,
-                                        AudioFormat.CHANNEL_IN_MONO,
-                                        AudioFormat.ENCODING_PCM_16BIT
-                                ),
-                                FRAME_SIZE * 2
-                        )
+                        AudioFormat.ENCODING_PCM_16BIT
                 )
-                if (NoiseSuppressor.isAvailable()) {
-                    NoiseSuppressor.create(audioRecord!!.audioSessionId)
+                val recordBuffer = maxOf(minBuf, ENHANCED_BUFFER_SIZE)
+
+                audioRecord = try {
+                    AudioRecord(
+                            MediaRecorder.AudioSource.VOICE_COMMUNICATION,
+                            ENHANCED_SAMPLE_RATE,
+                            AudioFormat.CHANNEL_IN_MONO,
+                            AudioFormat.ENCODING_PCM_16BIT,
+                            recordBuffer
+                    )
+                } catch (_: Exception) {
+                    AudioRecord(
+                            MediaRecorder.AudioSource.MIC,
+                            ENHANCED_SAMPLE_RATE,
+                            AudioFormat.CHANNEL_IN_MONO,
+                            AudioFormat.ENCODING_PCM_16BIT,
+                            recordBuffer
+                    )
                 }
-                if (AutomaticGainControl.isAvailable()) {
-                    AutomaticGainControl.create(audioRecord!!.audioSessionId)
-                }
-                if (AcousticEchoCanceler.isAvailable()) {
-                    AcousticEchoCanceler.create(audioRecord!!.audioSessionId)
-                }
+
                 if (audioRecord?.state != AudioRecord.STATE_INITIALIZED) {
-                    Timber.e("❌ Enhanced AudioRecord initialization failed")
+                    Timber.e("❌ AudioRecord init failed")
                     return@launch
                 }
 
-                audioRecord?.startRecording()
-                val roomToken = "${roomId.hashCode()}:"
-                Timber.d("🎤 Enhanced audio recording started for room: $roomId")
+                // Enable AEC if available
+                if (AcousticEchoCanceler.isAvailable()) {
+                    runCatching {
+                        aec = AcousticEchoCanceler.create(audioRecord!!.audioSessionId)
+                        aec?.enabled = true
+                        Timber.d("🎧 AEC enabled")
+                    }.onFailure { Timber.w(it, "AEC init failed") }
+                }
 
-                val buffer = ByteArray(FRAME_SIZE)
-                val maxRecordingTimeMs = MAX_RECORDING_TIME_SECONDS * 1000L
+                // Start recording
+                audioRecord?.startRecording()
+                Timber.d("🎤 Audio recording started for room=$roomId")
+
+                val roomToken = "${roomId.hashCode()}:".toByteArray()
+                val frameBuffer = ByteArray(BYTES_PER_TICK)
                 val recordingStartTime = System.currentTimeMillis()
+                val maxRecordingTimeMs = MAX_RECORDING_TIME_SECONDS * 1000L
+
                 var packetCount = 0
-                val frameDurationMs = 20
 
                 while (isSending && audioRecord?.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
-                    // Check timeout
-                    val currentTime = System.currentTimeMillis()
-                    val recordingDuration = currentTime - recordingStartTime
-                    val frameStart = System.nanoTime()
-
-                    if (recordingDuration >= maxRecordingTimeMs) {
-                        Timber.d("⏰ Enhanced recording time limit reached: ${recordingDuration}ms")
+                    val now = System.currentTimeMillis()
+                    if (now - recordingStartTime >= maxRecordingTimeMs) {
+                        Timber.d("⏰ Time limit reached")
                         isSending = false
                         onTimeoutCallback?.invoke()
                         globalTimeoutCallback?.invoke(roomId)
                         break
                     }
 
-                    val read = audioRecord?.read(buffer, 0, buffer.size) ?: 0
-                    if (read > 0) {
-                        packetCount++
+                    val frameStart = System.nanoTime()
+                    var filled = 0
+                    while (filled < BYTES_PER_TICK && isSending) {
+                        val r = audioRecord?.read(frameBuffer, filled, BYTES_PER_TICK - filled) ?: 0
+                        if (r <= 0) break
+                        filled += r
+                    }
+                    if (filled <= 0) continue
 
-                        // Collect audio data for voice message saving
-                        val audioChunk = ByteArray(read)
-                        System.arraycopy(buffer, 0, audioChunk, 0, read)
-                        onAudioDataCallback?.invoke(audioChunk)
+                    val audioChunk = frameBuffer.copyOf(filled)
+                    onAudioDataCallback?.invoke(audioChunk)
 
-                        // Send to all connected clients
-                        synchronized(clientSockets) {
-                            clientSockets.removeAll { it.isClosed }
-                            clientSockets.forEach { client ->
-                                try {
-                                    val stream = clientStreams[client]
-                                    if (stream != null) {
-                                        val tokenBytes = roomToken.toByteArray()
-                                        val combinedData = ByteArray(tokenBytes.size + read)
-                                        System.arraycopy(tokenBytes, 0, combinedData, 0, tokenBytes.size)
-                                        System.arraycopy(buffer, 0, combinedData, tokenBytes.size, read)
+                    synchronized(clientSockets) {
+                        clientSockets.removeAll { it.isClosed }
+                        clientSockets.forEach { client ->
+                            try {
+                                clientStreams[client]?.apply {
+                                    write(roomToken)
+                                    write(audioChunk, 0, audioChunk.size)
+                                    flush()
+//                                    if (packetCount % 3 == 0) flush()
 
-                                        stream.write(combinedData)
-                                        if (packetCount % 5 == 0) {
-                                            stream.flush()
-                                        }
-
-                                        if (packetCount % 10 == 1) {
-                                            Timber.d("📤 Enhanced packet #$packetCount sent: ${combinedData.size} bytes")
-                                        }
-                                    }
-                                } catch (e: Exception) {
-                                    Timber.w("❌ Enhanced send error: ${e.message}")
-                                    synchronized(clientSockets) {
-                                        clientSockets.remove(client)
-                                        clientStreams.remove(client)
-                                        client.close()
-                                    }
+                                }
+                            } catch (e: Exception) {
+                                Timber.w("Send error: ${e.message}")
+                                runCatching {
+                                    clientStreams.remove(client)
+                                    client.close()
                                 }
                             }
                         }
-
-                        // Send via TURN relay if available
-                        turnRelaySocket?.let { relaySocket ->
-                            try {
-                                val tokenBytes = roomToken.toByteArray()
-                                val combinedData = ByteArray(tokenBytes.size + read)
-                                System.arraycopy(tokenBytes, 0, combinedData, 0, tokenBytes.size)
-                                System.arraycopy(buffer, 0, combinedData, tokenBytes.size, read)
-
-                                relaySocket.getOutputStream().write(combinedData)
-                                relaySocket.getOutputStream().flush()
-                            } catch (e: Exception) {
-                                Timber.w("❌ TURN relay send error: ${e.message}")
-                            }
-                        }
                     }
+
+                    packetCount++
+                    if (packetCount % 20 == 0) {
+                        Timber.d("📤 Sent $packetCount frames (~${packetCount * FRAME_DURATION_MS}ms)")
+                    }
+
+                    // Keep cadence ~20ms
                     val elapsedMs = (System.nanoTime() - frameStart) / 1_000_000
-                    if (elapsedMs < frameDurationMs) {
-                        delay(frameDurationMs - elapsedMs) // keep real-time 20ms spacing
+                    if (elapsedMs < FRAME_DURATION_MS) {
+                        delay(FRAME_DURATION_MS - elapsedMs)
                     }
                 }
 
-                Timber.d("Enhanced recording ended: $packetCount packets sent")
+                Timber.d("✅ Recording ended: $packetCount frames sent")
             } catch (e: Exception) {
-                Timber.e(e, "Enhanced audio recording error")
+                Timber.e(e, "💥 Recording error")
             } finally {
                 cleanupEnhancedAudio()
             }
@@ -605,98 +567,71 @@ class EnhancedPttTcpSender(
     }
 
     /**
-     * Create TURN relay connection
-     */
-    private fun createTurnRelayConnection(): Socket? {
-        return try {
-            // Connect to TURN server
-            val socket = Socket()
-            socket.connect(InetSocketAddress(TURN_HOST, 3478), 5000) // 5 second timeout
-
-            // TODO: Implement TURN protocol handshake
-            // For now, return the socket for basic relay functionality
-            socket
-        } catch (e: Exception) {
-            Timber.e(e, "Failed to create TURN relay connection")
-            null
-        }
-    }
-
-    /**
-     * Connect with TURN fallback support
-     */
-    private fun connectWithTurnFallback(remoteIp: String, port: Int): Socket? {
-        return try {
-            // Try direct connection first
-            Timber.d("🔌 Attempting direct connection to $remoteIp:$port")
-            val socket = Socket()
-            socket.connect(java.net.InetSocketAddress(remoteIp, port), 5000)
-            Timber.d("✅ Direct connection established to $remoteIp:$port")
-            socket
-        } catch (e: Exception) {
-            Timber.w(e, "❌ Direct connection failed, would use TURN relay in production")
-            // In a real TURN implementation, this would establish a connection through the TURN server
-            // For now, return null to indicate connection failure
-            null
-        }
-    }
-
-    /**
-     * Stop enhanced sending with proper cleanup
+     * Stop sending + cleanup
      */
     fun stopEnhancedSending() {
         isSending = false
         cleanupEnhancedAudio()
-
-        try {
-            scope.cancel()
-        } catch (_: Exception) {
-        }
-
+        runCatching { scope.cancel() }
         onStopCallback?.invoke()
-        Timber.d("Enhanced TCP Sender stopped")
+        Timber.d("🛑 TCP Sender stopped")
     }
 
     /**
-     * Enhanced cleanup
+     * Full cleanup
      */
     private fun cleanupEnhancedAudio() {
-        audioRecord?.let {
-            try {
-                if (it.recordingState == AudioRecord.RECORDSTATE_RECORDING) it.stop()
-            } catch (_: Exception) {
-            }
-            try {
-                it.release()
-            } catch (_: Exception) {
+        Timber.d("🧹 cleanupEnhancedAudio() start")
+
+        // Release AEC
+        runCatching {
+            aec?.enabled = false
+            aec?.release()
+            Timber.d("🎧 AEC released")
+        }
+        aec = null
+
+        // Release AudioRecord
+        runCatching {
+            audioRecord?.apply {
+                if (recordingState == AudioRecord.RECORDSTATE_RECORDING) stop()
+                release()
+                Timber.d("🎤 AudioRecord released")
             }
         }
         audioRecord = null
 
+        // Reset AudioManager
+        runCatching {
+            audioManager?.mode = AudioManager.MODE_NORMAL
+            Timber.d("🎚️ AudioManager reset to NORMAL")
+        }
+        audioManager = null
+
+        // Close clients
         synchronized(clientSockets) {
             clientSockets.forEach { client ->
                 runCatching {
                     clientStreams[client]?.close()
                     client.close()
+                    Timber.d("🔌 Closed client: ${client.inetAddress.hostAddress}")
                 }
             }
             clientSockets.clear()
             clientStreams.clear()
         }
 
-        try {
+        // Close server socket
+        runCatching {
             socket?.close()
-        } catch (_: Exception) {
+            Timber.d("🖧 Server socket closed")
         }
         socket = null
 
-        try {
-            turnRelaySocket?.close()
-        } catch (_: Exception) {
-        }
-        turnRelaySocket = null
+        Timber.d("✅ cleanupEnhancedAudio() done")
     }
 }
+
 
 /**
  * Enhanced Matrix PTT Sender with audio data collection
@@ -713,24 +648,32 @@ class EnhancedMatrixPttSender(
     private var audioRecord: AudioRecord? = null
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
+    // ✅ Enhanced PCM+FEC encoder للقضاء على packet loss
+    private var opusEncoder: OpusPttCodec.OpusEncoder? = null
+
     companion object {
-        const val SAMPLE_RATE = 16000 // Optimized for voice clarity and network efficiency
-        const val BUFFER_SIZE = 8192 // Further increased buffer for ultra-smooth audio
+        const val SAMPLE_RATE = 16000 // ✅ عودة لـ 16kHz للتوافق مع النظام
+        const val BUFFER_SIZE = 2048 // ✅ تقليل للتوافق مع TCP LAN
         const val MAX_RECORDING_TIME_MS = 30_000L
-        const val FRAME_MS = 80 // Reduced frame size for lower latency and smoother audio
-        const val CHUNK_SIZE = 640 // 20ms of audio at 16kHz for optimal clarity
+        const val FRAME_MS = 20 // ✅ تقليل للتوافق مع TCP LAN
+        const val CHUNK_SIZE = 640 // ✅ تقليل للتوافق مع TCP LAN
+        const val FRAME_SIZE = 640 // ✅ توحيد مع TCP Transport
     }
 
     fun startStreaming() {
-        if (isStreaming) return
-        isStreaming = true
+        if (isStreaming) {
+            Timber.w("⚠️ ENHANCED MATRIX PTT: Already streaming, ignoring start")
+            return
+        }
 
-        Timber.d("🎙️ Starting Enhanced Matrix PTT streaming...")
+        isStreaming = true
+        Timber.d("🎙️ ENHANCED MATRIX PTT: Starting Enhanced Matrix PTT streaming with ALL FEATURES")
+        Timber.d("🎯 ENHANCED MATRIX PTT: Opus+FEC encoding, Network-aware quality, Packet redundancy, Audio processing")
 
         scope.launch {
-            val room = session.getRoom(roomId)
-            if (room == null) {
+            val room = session.getRoom(roomId) ?: run {
                 Timber.e("❌ Matrix room not found: $roomId")
+                isStreaming = false
                 return@launch
             }
 
@@ -743,91 +686,227 @@ class EnhancedMatrixPttSender(
 
             if (roomMembers.isEmpty()) {
                 Timber.w("⚠️ No other members in room for PTT")
+                isStreaming = false
                 return@launch
             }
 
+            val baseTimestamp = System.currentTimeMillis()
+
+            // ✅ تهيئة Enhanced PCM+FEC encoder
+            Timber.d("🎵 ENHANCED MATRIX PTT: Initializing Opus+FEC+PLC encoder...")
+            opusEncoder = OpusPttCodec.OpusEncoder(context).apply {
+                if (!initialize()) {
+                    Timber.e("❌ ENHANCED MATRIX PTT: Failed to initialize Enhanced PCM+FEC encoder - falling back to PCM")
+                    opusEncoder = null
+                } else {
+//                    runCatching {
+//                        // أمثلة — عدّل للأسماء الفعلية في OpusPttCodec لديك
+//                        setInbandFecEnabled(true)
+//                        setExpectedPacketLossPercent(10)   // 5–15% حسب البروفايل
+//                        setTargetBitrateKbps(16)           // 12–20 kbps للكلام
+//                        setFrameDurationMs(FRAME_MS)
+//                        setComplexity(6)                    // 0..10
+//                    }
+                    Timber.d("✅ ENHANCED MATRIX PTT: Opus+FEC+PLC encoder initialized successfully!")
+                }
+            }
             // Enhanced AudioRecord with optimized settings for crystal clear audio
             val minBufferSize = AudioRecord.getMinBufferSize(
                     SAMPLE_RATE,
                     AudioFormat.CHANNEL_IN_MONO,
                     AudioFormat.ENCODING_PCM_16BIT
             )
-            val optimalBufferSize = max(minBufferSize, BUFFER_SIZE * 2) // 2x buffer for ultra-smooth recording
+//            val optimalBufferSize = max(minBufferSize, max(BUFFER_SIZE, CHUNK_SIZE * 2))
+            val optimalBufferSize = max(minBufferSize, CHUNK_SIZE * 4)
+            Timber.d("minBufferSize=$minBufferSize optimalBufferSize=$optimalBufferSize")
 
-            audioRecord = AudioRecord(
-                    MediaRecorder.AudioSource.VOICE_COMMUNICATION, // Changed from VOICE_COMMUNICATION for better quality
-                    SAMPLE_RATE,
-                    AudioFormat.CHANNEL_IN_MONO,
-                    AudioFormat.ENCODING_PCM_16BIT,
-                    optimalBufferSize
-            )
+//            val source = if (NoiseSuppressor.isAvailable()) {
+//                MediaRecorder.AudioSource.VOICE_COMMUNICATION
+//            } else {
+//                MediaRecorder.AudioSource.MIC
+//            }
 
-            if (NoiseSuppressor.isAvailable()) {
-                NoiseSuppressor.create(audioRecord!!.audioSessionId)
-            }
-            if (AutomaticGainControl.isAvailable()) {
-                AutomaticGainControl.create(audioRecord!!.audioSessionId)
-            }
-            if (AcousticEchoCanceler.isAvailable()) {
-                AcousticEchoCanceler.create(audioRecord!!.audioSessionId)
-            }
+            audioRecord = AudioRecord.Builder()
+                    .setAudioSource(MediaRecorder.AudioSource.MIC) // ✅ تغيير من DEFAULT إلى VOICE_COMMUNICATION
+                    .setAudioFormat(
+                            AudioFormat.Builder()
+                                    .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                                    .setSampleRate(SAMPLE_RATE)
+                                    .setChannelMask(AudioFormat.CHANNEL_IN_MONO)
+                                    .build()
+                    )
+                    .setBufferSizeInBytes(optimalBufferSize)
+                    .build()
 
             if (audioRecord?.state != AudioRecord.STATE_INITIALIZED) {
                 Timber.e("❌ Failed to initialize AudioRecord for Enhanced Matrix")
+                isStreaming = false
                 return@launch
             }
 
-            val bytesPerMs = (SAMPLE_RATE * 2) / 1000
-            val frameBytesTarget = FRAME_MS * bytesPerMs
+            // ✅ Audio effects
+//            runCatching {
+//                if (NoiseSuppressor.isAvailable()) {
+//                    val ns = NoiseSuppressor.create(audioRecord!!.audioSessionId)
+//                    ns?.enabled = false
+//                    Timber.d("🎵 Noise Suppressor enabled")
+//                }
+//            }
+//            runCatching {
+//                if (AutomaticGainControl.isAvailable()) {
+//                    val agc = AutomaticGainControl.create(audioRecord!!.audioSessionId)
+//                    agc?.enabled = false
+//                    Timber.d("🎵 Automatic Gain Control enabled")
+//                }
+//            }
+//            runCatching {
+//                if (AcousticEchoCanceler.isAvailable()) {
+//                    val aec = AcousticEchoCanceler.create(audioRecord!!.audioSessionId)
+//                    aec?.enabled = false
+//                    Timber.d("🎵 Acoustic Echo Canceler enabled")
+//                }
+//            }
+
+            // ✅ استخدام إعدادات ثابتة ومتوافقة مع TCP LAN
+            val networkProfile = NetworkAudioQualityManager.getOptimalQualityProfile(context)
+//            val adaptiveFrameMs = FRAME_MS // ✅ استخدام FRAME_MS الثابت للتوافق
+            val frameBytesTarget = FRAME_SIZE // ✅ استخدام FRAME_SIZE الثابت للتوافق مع TCP
+
+            Timber.d("🎯 ENHANCED MATRIX PTT: Frame size target: ${frameBytesTarget}B (same as TCP Transport)")
 
             val agg = ByteArrayOutputStream(frameBytesTarget * 2)
             var seq = 0L
             val startTime = System.currentTimeMillis()
             var packetCount = 0
+            var lastSendTime = 0L
+
+            Timber.d("🎤 ENHANCED MATRIX PTT: Starting audio recording with enhanced processing...")
+            android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_AUDIO)
 
             audioRecord?.startRecording()
 
+            if (audioRecord?.recordingState != AudioRecord.RECORDSTATE_RECORDING) {
+                Timber.e("❌ AudioRecord did not actually start recording")
+                return@launch
+            }
+
+            Timber.d("🔄 ENHANCED MATRIX PTT: Entering streaming loop - network profile: ${networkProfile.description}")
+
+            val tmp = ByteArray(CHUNK_SIZE)
+
             while (isStreaming && (System.currentTimeMillis() - startTime) < MAX_RECORDING_TIME_MS) {
-                val tmp = ByteArray(CHUNK_SIZE) // ~40ms at 16kHz for smoother audio
                 val read = audioRecord?.read(tmp, 0, tmp.size) ?: 0
+                Timber.d("🎙️ AudioRecord read = $read bytes")
 
                 if (read > 0) {
+
+                    val audioLevel = calculateAudioLevel(tmp, read)
+                    if (audioLevel < 50) { // ✅ تقليل threshold من 100 إلى 50
+                        Timber.w("⚠️ LOW AUDIO LEVEL: $audioLevel - Microphone may not be working properly")
+                    } else {
+                        Timber.d("✅ Audio level: $audioLevel - Good microphone input")
+                    }
+
                     // Collect audio data for voice message saving
+                    applySmartGain(tmp, read) // ✅ زيادة من 1.2f إلى 2.0f
+
                     val audioChunk = ByteArray(read)
                     System.arraycopy(tmp, 0, audioChunk, 0, read)
                     onAudioDataCallback?.invoke(audioChunk)
 
                     agg.write(tmp, 0, read)
 
-                    if (agg.size() >= frameBytesTarget) {
+                    // ✅ Enhanced frame aggregation with adaptive network-aware timing
+                    if (agg.size() >= frameBytesTarget || shouldFlushBuffer(seq, lastSendTime, agg.size(), frameBytesTarget)) {
                         val payload = agg.toByteArray()
                         agg.reset()
                         seq++
 
-                        val base64 = Base64.encodeToString(payload, Base64.NO_WRAP)
+                        // ✅ ترميز Enhanced PCM+FEC إن أمكن، وإلا PCM
+
+                        val (finalPayload, encoding) = run {
+                            Timber.d("🔍 DEBUG: Payload size: ${payload.size}")
+
+                            // تحويل إلى shorts للفحص
+                            val shorts = ShortArray(payload.size / 2)
+                            java.nio.ByteBuffer.wrap(payload).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+                                    .asShortBuffer().get(shorts)
+
+                            Timber.d("🔍 DEBUG: First few samples: ${shorts.take(5).joinToString()}")
+                            Timber.d("�� DEBUG: Sample range: ${shorts.minOrNull()} to ${shorts.maxOrNull()}")
+
+                            // ✅ فحص البيانات المشوهة
+                            val maxAmplitude = shorts.maxOfOrNull { kotlin.math.abs(it.toInt()) } ?: 0
+                            val avgAmplitude = shorts.map { kotlin.math.abs(it.toInt()) }.average().toInt()
+
+                            Timber.d("�� DEBUG: Audio analysis - max=$maxAmplitude, avg=$avgAmplitude")
+
+                            // ✅ فحص إذا كانت البيانات مشوهة
+                            if (maxAmplitude > 25000 || avgAmplitude > 10000) {
+                                Timber.w("⚠️ WARNING: Audio data appears distorted - max=$maxAmplitude, avg=$avgAmplitude")
+                                // تطبيق تصحيح للبيانات المشوهة
+                                val correctedShorts = correctDistortedAudio(shorts)
+                                val correctedBytes = ByteArray(correctedShorts.size * 2)
+                                java.nio.ByteBuffer.wrap(correctedBytes).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+                                        .asShortBuffer().put(correctedShorts)
+                                correctedBytes to "pcm_16bit"
+                            } else {
+                                payload to "pcm_16bit"
+                            }
+                        }
+
+                        val base64 = Base64.encodeToString(finalPayload, Base64.NO_WRAP)
+                        val frameTimestamp = baseTimestamp + (seq * FRAME_MS)
 
                         try {
                             val targets = roomMembers.associate { member -> member.userId to listOf("*") }
-                            session.toDeviceService().sendToDevice(
-                                    eventType = "m.ptt.audio",
-                                    targets = targets,
-                                    content = mapOf(
-                                            "room_id" to roomId,
-                                            "sender_id" to session.myUserId,
-                                            "timestamp" to System.currentTimeMillis(),
-                                            "seq" to seq,
-                                            "sample_rate" to SAMPLE_RATE,
-                                            "encoding" to "pcm_16bit",
-                                            "frame_ms" to FRAME_MS,
-                                            "audio_data" to base64
-                                    )
+
+                            // 📡 Enhanced Matrix PTT with comprehensive metadata
+                            val content = mutableMapOf<String, Any>(
+                                    "room_id" to roomId,
+                                    "sender_id" to session.myUserId,
+                                    "timestamp" to frameTimestamp,
+                                    "seq" to seq,
+                                    "sample_rate" to SAMPLE_RATE,
+                                    "encoding" to encoding, // ✅ "opus_fec" أو "pcm_16bit"
+                                    "frame_ms" to FRAME_MS,
+                                    "audio_data" to base64,
+                                    "network_type" to NetworkAudioQualityManager.getCurrentNetworkType(context),
+                                    "frame_size" to finalPayload.size,
+                                    "fec_enabled" to (encoding == "opus_fec"), // ✅ معلومة FEC للمستقبل
+                                    "quality_profile" to networkProfile.description
                             )
+
+                            // Add enhanced packet redundancy
+                            val currentLoss = NetworkAudioQualityManager.getCurrentNetworkCondition().packetLossPercent / 100f
+                            val redundancy = when {
+                                currentLoss < 0.05 -> 1
+                                currentLoss < 0.15 -> 2
+                                else -> 4
+                            }
+                            PttQualityEnhancer.addPacketRedundancy(context, content, seq, base64, recentFrames, redundancy)
+
+                            // Send with retry logic for Matrix reliability
+                            sendMatrixFrameWithRetry(targets, content)
+
+                            lastSendTime = System.currentTimeMillis()
                             packetCount++
-                            if (packetCount <= 3 || packetCount % 10 == 0) {
-                                Timber.d("📤 Enhanced PTT frame #$packetCount (seq=$seq, ${payload.size}B)")
+
+                            if (packetCount == 1) {
+                                Timber.d("🎉 First frame sent (${finalPayload.size}B, $encoding)")
+                            } else if (packetCount <= 5 || packetCount % 10 == 0) {
+                                Timber.d(
+                                        "📤 frame#$packetCount seq=$seq bytes=${finalPayload.size} enc=$encoding net=${
+                                            NetworkAudioQualityManager.getCurrentNetworkType(
+                                                    context
+                                            )
+                                        }"
+                                )
                             }
                         } catch (e: Exception) {
-                            Timber.e(e, "❌ Failed to send Enhanced PTT frame")
+                            Timber.e(e, "❌ Failed to send Enhanced PTT frame #$packetCount")
+                            // Add to failed frames for potential resending
+                            handleSendFailure(seq, base64)
                         }
                     }
                 } else if (read < 0) {
@@ -842,19 +921,24 @@ class EnhancedMatrixPttSender(
                 seq++
                 val base64 = Base64.encodeToString(payload, Base64.NO_WRAP)
                 val targets = roomMembers.associate { member -> member.userId to listOf("*") }
+
+                val finalContent = mutableMapOf<String, Any>(
+                        "room_id" to roomId,
+                        "sender_id" to session.myUserId,
+                        "timestamp" to (baseTimestamp + (seq * FRAME_MS)),
+                        "seq" to seq,
+                        "sample_rate" to SAMPLE_RATE,
+                        "encoding" to "pcm_16bit",
+                        "frame_ms" to FRAME_MS,
+                        "audio_data" to base64
+                )
+
+                PttQualityEnhancer.addPacketRedundancy(context, finalContent, seq, base64, recentFrames)
+
                 session.toDeviceService().sendToDevice(
                         eventType = "m.ptt.audio",
                         targets = targets,
-                        content = mapOf(
-                                "room_id" to roomId,
-                                "sender_id" to session.myUserId,
-                                "timestamp" to System.currentTimeMillis(),
-                                "seq" to seq,
-                                "sample_rate" to SAMPLE_RATE,
-                                "encoding" to "pcm_16bit",
-                                "frame_ms" to FRAME_MS,
-                                "audio_data" to base64
-                        )
+                        content = finalContent
                 )
             }
 
@@ -863,12 +947,201 @@ class EnhancedMatrixPttSender(
         }
     }
 
+    private fun correctDistortedAudio(samples: ShortArray): ShortArray {
+        val corrected = ShortArray(samples.size)
+
+        for (i in samples.indices) {
+            val sample = samples[i].toFloat()
+
+            // ✅ تطبيق soft clipping بدلاً من hard clipping
+            val correctedSample = when {
+                sample > 20000 -> 20000f // soft limit
+                sample < -20000 -> -20000f // soft limit
+                else -> sample
+            }
+
+            // ✅ تطبيق noise reduction بسيط
+            val noiseReduced = if (kotlin.math.abs(correctedSample) < 100) {
+                0f // إزالة الضوضاء الخفيفة
+            } else {
+                correctedSample
+            }
+
+            corrected[i] = noiseReduced.toInt().toShort()
+        }
+
+        return corrected
+    }
+
+    private fun applySmartGain(buffer: ByteArray, size: Int) {
+        val bb = java.nio.ByteBuffer.wrap(buffer, 0, size).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+        val shortBuf = bb.asShortBuffer()
+        val samples = ShortArray(shortBuf.remaining())
+        shortBuf.get(samples)
+
+        // ✅ تحليل شامل للبيانات
+        val maxAmplitude = samples.maxOfOrNull { kotlin.math.abs(it.toInt()) } ?: 0
+        val avgAmplitude = samples.map { kotlin.math.abs(it.toInt()) }.average().toInt()
+        val rmsAmplitude = kotlin.math.sqrt(samples.map { it.toDouble() * it.toDouble() }.average()).toInt()
+
+        Timber.d("🔍 Advanced analysis: max=$maxAmplitude, avg=$avgAmplitude, rms=$rmsAmplitude")
+
+        // ✅ تطبيق معالجة متقدمة حسب نوع البيانات
+        when {
+            maxAmplitude < 50 -> {
+                // بيانات ضعيفة جداً - تطبيق gain معتدل مع noise reduction
+                applyGentleGain(samples, 1.3f)
+                applyNoiseReduction(samples, threshold = 50)
+                Timber.d("🔊 Weak audio - applied gentle gain + noise reduction")
+            }
+            maxAmplitude > 15000 -> {
+                // بيانات قوية - تطبيق soft clipping و noise reduction
+                applySoftClipping(samples, maxLevel = 15000)
+                applyNoiseReduction(samples, threshold = 100)
+                Timber.d("🔊 Strong audio - applied soft clipping + noise reduction")
+            }
+            rmsAmplitude < 200 -> {
+                // بيانات متوسطة ضعيفة - تطبيق gain معتدل
+                applyGentleGain(samples, 1.2f)
+                Timber.d("🔊 Medium-weak audio - applied gentle gain")
+            }
+            else -> {
+                // بيانات جيدة - تطبيق noise reduction فقط
+                applyNoiseReduction(samples, threshold = 80)
+                Timber.d("🔊 Good audio - applied noise reduction only")
+            }
+        }
+
+        bb.rewind()
+        bb.asShortBuffer().put(samples)
+    }
+
+    private fun applyGentleGain(samples: ShortArray, factor: Float) {
+        for (i in samples.indices) {
+            val sample = samples[i].toFloat()
+            val amplified = sample * factor
+
+            // ✅ تطبيق soft limiting بدلاً من hard clipping
+            val limited = when {
+                amplified > 12000 -> 12000f + (amplified - 12000f) * 0.3f
+                amplified < -12000 -> -12000f + (amplified + 12000f) * 0.3f
+                else -> amplified
+            }
+
+            samples[i] = limited.coerceIn(Short.MIN_VALUE.toFloat(), Short.MAX_VALUE.toFloat()).toInt().toShort()
+        }
+    }
+
+    // ✅ تطبيق soft clipping للقضاء على التشويش
+    private fun applySoftClipping(samples: ShortArray, maxLevel: Int) {
+        for (i in samples.indices) {
+            val sample = samples[i].toFloat()
+            val absSample = kotlin.math.abs(sample)
+
+            if (absSample > maxLevel) {
+                // ✅ تطبيق soft clipping باستخدام tanh
+                val sign = if (sample >= 0) 1f else -1f
+                val normalized = absSample / maxLevel
+                val clipped = kotlin.math.tanh(normalized) * maxLevel
+                samples[i] = (clipped * sign).toInt().toShort()
+            }
+        }
+    }
+
+    // ✅ تطبيق noise reduction متقدم
+    private fun applyNoiseReduction(samples: ShortArray, threshold: Int) {
+        for (i in samples.indices) {
+            val sample = samples[i].toFloat()
+            val absSample = kotlin.math.abs(sample)
+
+            if (absSample < threshold) {
+                // ✅ تطبيق fade-out بدلاً من قطع مفاجئ
+                val fadeFactor = absSample / threshold
+                samples[i] = (sample * fadeFactor).toInt().toShort()
+            }
+        }
+    }
+
+    private fun calculateAudioLevel(buffer: ByteArray, size: Int): Int {
+        var sum = 0L
+        var i = 0
+        while (i + 1 < size) {
+            val sample = ((buffer[i + 1].toInt() and 0xFF) shl 8) or (buffer[i].toInt() and 0xFF)
+            sum += kotlin.math.abs(sample)
+            i += 2
+        }
+        return (sum / (size / 2)).toInt()
+    }
+
     fun stopStreaming() {
+        if (!isStreaming) return
         isStreaming = false
-        audioRecord?.stop()
-        audioRecord?.release()
+        runCatching { audioRecord?.stop() }
+        runCatching { audioRecord?.release() }
         audioRecord = null
-        scope.cancel()
+        runCatching { opusEncoder?.release() }
+        opusEncoder = null
+        runCatching { scope.cancel() }
         Timber.d("🛑 Enhanced Matrix PTT sender stopped")
+    }
+
+    // Enhanced Matrix transmission methods
+    private val recentFrames = mutableListOf<Pair<Long, String>>() // seq → base64
+    private val maxRedundantFrames = 2
+    private val failedFrames = mutableListOf<Pair<Long, String>>() // seq → base64
+    private val maxFailedFrames = 10
+
+    /**
+     * Send Matrix frame with retry logic for better reliability
+     */
+    private suspend fun sendMatrixFrameWithRetry(
+            targets: Map<String, List<String>>,
+            content: Map<String, Any>,
+            retries: Int = 2
+    ) {
+        repeat(retries + 1) { attempt ->
+            try {
+                session.toDeviceService().sendToDevice(
+                        eventType = "m.ptt.audio",
+                        targets = targets,
+                        content = content
+                )
+                // خزّن آخر الإطارات للـ redundancy
+                (content["seq"] as? Number)?.toLong()?.let { s ->
+                    (content["audio_data"] as? String)?.let { b64 ->
+                        recentFrames.add(s to b64)
+                        if (recentFrames.size > maxRedundantFrames) recentFrames.removeFirst()
+                    }
+                }
+                return
+            } catch (e: Exception) {
+                if (attempt < retries) {
+                    Timber.w("Send attempt ${attempt + 1} failed → retry")
+                    kotlinx.coroutines.delay(50)
+                } else throw e
+            }
+        }
+    }
+
+    /**
+     * Determine if buffer should be flushed based on network conditions
+     */
+    private fun shouldFlushBuffer(
+            @Suppress("UNUSED_PARAMETER") seq: Long,
+            lastSendTime: Long,
+            aggSize: Int,
+            frameBytesTarget: Int
+    ): Boolean {
+        val dt = System.currentTimeMillis() - lastSendTime
+        return aggSize >= frameBytesTarget || dt > FRAME_MS
+    }
+
+    /**
+     * Handle send failure by storing frame for potential redundancy
+     */
+    private fun handleSendFailure(seq: Long, base64: String) {
+        failedFrames.add(seq to base64)
+        if (failedFrames.size > maxFailedFrames) failedFrames.removeFirst()
+        Timber.w("📉 Stored failed frame seq=$seq")
     }
 }

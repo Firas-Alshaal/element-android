@@ -18,9 +18,5 @@ interface RoomListListener {
     fun onAcceptRoomInvitation(room: RoomSummary)
     fun onJoinSuggestedRoom(room: SpaceChildInfo)
     fun onSuggestedRoomClicked(room: SpaceChildInfo)
-    fun onStartPtt(roomId: String)
-    fun onStopPtt(roomId: String)
-    fun onPttTimeout(roomId: String)
     fun requestVoicePermission(context: Context, callback: (Boolean) -> Unit)
-    fun checkPttPermissionAndStart(roomId: String, callback: (Boolean) -> Unit)
 }

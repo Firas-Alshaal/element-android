@@ -12,10 +12,13 @@ import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Typeface
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.CountDownTimer
 import android.text.method.LinkMovementMethod
+import android.view.Gravity
 import android.view.HapticFeedbackConstants
 import android.view.LayoutInflater
 import android.view.Menu
@@ -23,10 +26,8 @@ import android.view.MenuItem
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
-import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.ImageView
-import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.addCallback
@@ -135,10 +136,8 @@ import im.vector.app.features.home.room.detail.composer.CanSendStatus
 import im.vector.app.features.home.room.detail.composer.MessageComposerAction
 import im.vector.app.features.home.room.detail.composer.MessageComposerFragment
 import im.vector.app.features.home.room.detail.composer.MessageComposerViewModel
-import im.vector.app.features.home.room.detail.composer.PttManager
 import im.vector.app.features.home.room.detail.composer.PttMatrixSyncHandler
 import im.vector.app.features.home.room.detail.composer.EnhancedPttManager
-import im.vector.app.features.home.room.detail.composer.EnhancedPttReceiverService
 import im.vector.app.features.home.room.detail.composer.PttTcpReceiverService
 import im.vector.app.features.home.room.detail.composer.boolean
 import im.vector.app.features.home.room.detail.composer.voice.VoiceRecorderFragment
@@ -190,7 +189,6 @@ import im.vector.app.features.widgets.WidgetActivity
 import im.vector.app.features.widgets.WidgetArgs
 import im.vector.app.features.widgets.WidgetKind
 import im.vector.app.features.widgets.permissions.RoomWidgetPermissionBottomSheet
-import im.vector.app.push.fcm.AudioPlaybackService
 import im.vector.lib.core.utils.timer.Clock
 import im.vector.lib.strings.CommonStrings
 import kotlinx.coroutines.CoroutineScope
@@ -200,7 +198,6 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.billcarsonfr.jsonviewer.JSonViewerDialog
-import org.matrix.android.sdk.api.query.QueryStateEventValue
 import org.matrix.android.sdk.api.query.QueryStringValue
 import org.matrix.android.sdk.api.session.Session
 import org.matrix.android.sdk.api.session.events.model.EventType
@@ -224,7 +221,6 @@ import org.matrix.android.sdk.api.session.room.model.message.MessageWithAttachme
 import org.matrix.android.sdk.api.session.room.send.SendState
 import org.matrix.android.sdk.api.session.room.timeline.Timeline
 import org.matrix.android.sdk.api.session.room.timeline.TimelineEvent
-import org.matrix.android.sdk.api.session.room.timeline.getLastMessageContent
 import org.matrix.android.sdk.api.session.widgets.model.Widget
 import org.matrix.android.sdk.api.session.widgets.model.WidgetType
 import org.matrix.android.sdk.api.util.MatrixItem
@@ -267,10 +263,6 @@ class TimelineFragment :
     @Inject lateinit var galleryOrCameraDialogHelperFactory: GalleryOrCameraDialogHelperFactory
     @Inject lateinit var permalinkFactory: PermalinkFactory
 
-    companion object {
-        const val MAX_TYPING_MESSAGE_USERS_COUNT = 4
-    }
-
     private lateinit var galleryOrCameraDialogHelper: GalleryOrCameraDialogHelper
 
     private val timelineArgs: TimelineArgs by args()
@@ -307,10 +299,13 @@ class TimelineFragment :
 
     private val lazyLoadedViews = RoomDetailLazyLoadedViews()
 
-    private lateinit var pttManager: PttManager
-
     private lateinit var permissionLauncher: ActivityResultLauncher<Array<String>>
     private var permissionGrantedCallback: (() -> Unit)? = null
+
+    private var countdownTimer: CountDownTimer? = null
+    private var isCountdownActive = false
+    private var countdownTextView: TextView? = null
+    private var currentPttManager: EnhancedPttManager? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -324,7 +319,6 @@ class TimelineFragment :
             }
             permissionGrantedCallback = null
         }
-        pttManager = PttManager(requireContext(), session)
         analyticsScreenName = MobileScreen.ScreenName.Room
         galleryOrCameraDialogHelper = galleryOrCameraDialogHelperFactory.create(this)
         setFragmentResultListener(MigrateRoomBottomSheet.REQUEST_KEY) { _, bundle ->
@@ -361,9 +355,6 @@ class TimelineFragment :
                 startCallActivityResultLauncher = startCallActivityResultLauncher,
                 showDialogWithMessage = ::showDialogWithMessage,
                 onTapToReturnToCall = ::onTapToReturnToCall,
-                messageComposerViewModel = messageComposerViewModel,
-                myUserId = session.myUserId,
-                session = session
         )
         keyboardStateUtils = KeyboardStateUtils(requireActivity())
         lazyLoadedViews.bind(views)
@@ -487,12 +478,14 @@ class TimelineFragment :
         val btnRecord = views.pttAndComposerContainer.findViewById<ImageView>(R.id.btn_record_original)
         val waveAnimation = views.pttAndComposerContainer.findViewById<LottieAnimationView>(R.id.wave_animation_original)
 
-        // Initialize Enhanced PTT Manager (make it accessible in both actions)
-        var enhancedPttManager: EnhancedPttManager? = null
+        // إعداد TextView للعد التنازلي
+        setupCountdownTimer()
 
         btnRecord.setOnTouchListener { _, event ->
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
+                    // منع بدء PTT إذا كان العد التنازلي نشط
+                    if (isCountdownActive) return@setOnTouchListener false
 
                     if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
                         requestVoicePermission {
@@ -501,111 +494,319 @@ class TimelineFragment :
                         return@setOnTouchListener false
                     }
 
-                    lifecycleScope.launch {
-                        // ✅ POLICE RADIO PROTOCOL: Check if channel is busy
-                        val (isBusy, currentSpeaker) = PttMatrixSyncHandler.isChannelBusy(timelineArgs.roomId, session.myUserId)
-                        if (isBusy && currentSpeaker != null) {
-                            withContext(Dispatchers.Main) {
-                                Toast.makeText(requireContext(), "🚫 Channel busy - $currentSpeaker is speaking", Toast.LENGTH_SHORT).show()
-                            }
-                            Timber.w("🚫 POLICE RADIO: Channel busy - $currentSpeaker is speaking")
-                            return@launch
-                        }
-                        
-                        val room = session.getRoom(timelineArgs.roomId)
-                        val hasPermission = room?.let { hasPttPermission(it) } ?: false
-
-                        if (!hasPermission) {
-                            withContext(Dispatchers.Main) {
-                                Toast.makeText(requireContext(), "You don't have permission to send PTT in this room.", Toast.LENGTH_LONG).show()
-                            }
-                            Timber.w("⛔️ User doesn't have Synapse permission to send PTT")
-                            return@launch
-                        }
-
-                        isPushToTalkDialogShowing = true
-                        
-                        // Initialize Enhanced PTT Manager
-                        enhancedPttManager = EnhancedPttManager(requireContext(), session)
-                        
-                        // Stop any existing receiver services
-                        val stopIntent = Intent(requireContext(), PttTcpReceiverService::class.java).apply {
-                            putExtra("roomId", timelineArgs.roomId)
-                        }
-                        requireContext().stopService(stopIntent)
-                        
-                        val stopEnhancedIntent = Intent(requireContext(), EnhancedPttReceiverService::class.java).apply {
-                            putExtra("roomId", timelineArgs.roomId)
-                        }
-                        requireContext().stopService(stopEnhancedIntent)
-                        
-                        // ✅ Set up enhanced timeout callback
-                        enhancedPttManager?.setOnTimeoutCallback {
-                            requireActivity().runOnUiThread {
-                                waveAnimation.pauseAnimation()
-                                waveAnimation.visibility = View.GONE
-                                isPushToTalkDialogShowing = false
-                                Timber.d("⏰ Enhanced PTT timeout - wave animation stopped")
-                                Toast.makeText(requireContext(), "PTT timeout (30s limit)", Toast.LENGTH_SHORT).show()
-                            }
-                        }
-                        
-                        // ✅ START ENHANCED PTT: Better quality, TURN support, 4G optimized
-                        try {
-                            Timber.d("🚀 Starting Enhanced PTT for room: ${timelineArgs.roomId}")
-                            enhancedPttManager?.startEnhancedPttStreaming(timelineArgs.roomId)
-                            
-                            withContext(Dispatchers.Main) {
-                                waveAnimation.visibility = View.VISIBLE
-                                waveAnimation.playAnimation()
-                                Toast.makeText(requireContext(), "🎤 Enhanced PTT active", Toast.LENGTH_SHORT).show()
-                            }
-                        } catch (e: Exception) {
-                            Timber.e(e, "❌ Failed to start Enhanced PTT")
-                            withContext(Dispatchers.Main) {
-                                Toast.makeText(requireContext(), "Failed to start PTT", Toast.LENGTH_SHORT).show()
-                            }
-                            return@launch
-                        }
-                    }
-
+                    // بدء العد التنازلي بدلاً من PTT مباشرة
+                    startCountdownTimer()
                     true
                 }
 
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    if (isCountdownActive) {
+                        // إيقاف العد التنازلي إذا تم الإفراج مبكراً
+                        stopCountdownTimer()
+                        return@setOnTouchListener false
+                    }
+
                     if (!isPushToTalkDialogShowing) return@setOnTouchListener false
 
-                    // ✅ Clear enhanced timeout callback
-                    enhancedPttManager?.clearTimeoutCallback()
+                    // ✅ إصلاح: إيقاف PTT الفعلي
+                    stopActualPTT()
 
-                    // ✅ ENHANCED PTT STOP: Coordinated stop with voice message saving
-                    CoroutineScope(Dispatchers.IO).launch {
-                        try {
-                            Timber.d("🛑 Stopping Enhanced PTT for room: ${timelineArgs.roomId}")
-                            enhancedPttManager?.stopEnhancedPttStreaming(timelineArgs.roomId)
-                            
-                            withContext(Dispatchers.Main) {
-                                Toast.makeText(requireContext(), "PTT message sent", Toast.LENGTH_SHORT).show()
-                            }
-                        } catch (e: Exception) {
-                            Timber.e(e, "❌ Failed to stop Enhanced PTT - using fallback")
-                            // Fallback to legacy method if needed
-                            enhancedPttManager?.stopStreaming()
-                            sendPttStatus("idle")
-                        }
+                    // ✅ إصلاح: استخدام runOnUiThread بدلاً من withContext
+                    requireActivity().runOnUiThread {
+                        waveAnimation.pauseAnimation()
+                        waveAnimation.visibility = View.GONE
+                        isPushToTalkDialogShowing = false
                     }
-                    // ✅ Clear timeout callback when stopping normally
-                    pttManager.clearTimeoutCallback()
-                    waveAnimation.pauseAnimation()
-                    isPushToTalkDialogShowing = false
-                    waveAnimation.visibility = View.GONE
+
                     true
                 }
-
                 else -> false
             }
         }
     }
+
+    private fun stopCountdownTimer() {
+        countdownTimer?.cancel()
+        countdownTextView?.visibility = View.GONE
+        isCountdownActive = false
+    }
+
+    private fun setupCountdownTimer() {
+        val container = views.pttAndComposerContainer.findViewById<FrameLayout>(R.id.record_btn_wrapper)
+
+        countdownTextView = TextView(requireContext()).apply {
+            layoutParams = FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.WRAP_CONTENT,
+                    FrameLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                gravity = Gravity.CENTER
+            }
+            textSize = 70f
+            setTextColor(ContextCompat.getColor(requireContext(), android.R.color.white))
+            typeface = Typeface.DEFAULT_BOLD
+            visibility = View.GONE
+            elevation = 15f
+            setShadowLayer(6f, 3f, 3f, android.R.color.black)
+            text = "3"
+
+            setBackgroundColor(ContextCompat.getColor(requireContext(), android.R.color.transparent))
+
+        }
+
+        container?.addView(countdownTextView)
+    }
+
+    private fun startCountdownTimer() {
+        isCountdownActive = true
+        countdownTextView?.visibility = View.VISIBLE
+
+        countdownTimer = object : CountDownTimer(3000, 1000) {
+            override fun onTick(millisUntilFinished: Long) {
+                val secondsLeft = (millisUntilFinished / 1000).toInt()
+                countdownTextView?.text = secondsLeft.toString()
+
+                // تأثير بصري للعد التنازلي
+                countdownTextView?.animate()
+                        ?.scaleX(1.3f)
+                        ?.scaleY(1.3f)
+                        ?.setDuration(200)
+                        ?.withEndAction {
+                            countdownTextView?.animate()
+                                    ?.scaleX(1.0f)
+                                    ?.scaleY(1.0f)
+                                    ?.setDuration(200)
+                                    ?.start()
+                        }
+                        ?.start()
+            }
+
+            override fun onFinish() {
+                // إخفاء العد التنازلي وبدء PTT الفعلي
+                countdownTextView?.visibility = View.GONE
+                isCountdownActive = false
+
+                // بدء PTT الفعلي
+                startActualPTT()
+            }
+        }
+
+        countdownTimer?.start()
+    }
+
+    /**
+     * بدء PTT الفعلي بعد انتهاء العد التنازلي
+     */
+    private fun startActualPTT() {
+        lifecycleScope.launch {
+            // ✅ POLICE RADIO PROTOCOL: Check if channel is busy
+            val (isBusy, currentSpeaker) = PttMatrixSyncHandler.isChannelBusy(timelineArgs.roomId, session.myUserId)
+            if (isBusy && currentSpeaker != null) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(requireContext(), "🚫 Channel busy - $currentSpeaker is speaking", Toast.LENGTH_SHORT).show()
+                }
+                Timber.w("🚫 POLICE RADIO: Channel busy - $currentSpeaker is speaking")
+                return@launch
+            }
+
+            val room = session.getRoom(timelineArgs.roomId)
+            val hasPermission = room?.let { hasPttPermission(it) } ?: false
+
+            if (!hasPermission) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(requireContext(), "You don't have permission to send PTT in this room.", Toast.LENGTH_LONG).show()
+                }
+                Timber.w("⛔️ User doesn't have Synapse permission to send PTT")
+                return@launch
+            }
+
+            isPushToTalkDialogShowing = true
+
+            // Initialize Enhanced PTT Manager
+            currentPttManager = EnhancedPttManager(requireContext(), session)
+
+            // Stop any existing receiver services
+            val stopIntent = Intent(requireContext(), PttTcpReceiverService::class.java).apply {
+                putExtra("roomId", timelineArgs.roomId)
+            }
+            requireContext().stopService(stopIntent)
+
+            // ✅ Set up enhanced timeout callback
+            currentPttManager?.setOnTimeoutCallback {
+                requireActivity().runOnUiThread {
+                    val waveAnimation = views.pttAndComposerContainer.findViewById<LottieAnimationView>(R.id.wave_animation_original)
+                    waveAnimation.pauseAnimation()
+                    waveAnimation.visibility = View.GONE
+                    isPushToTalkDialogShowing = false
+                    Timber.d("⏰ Enhanced PTT timeout - wave animation stopped")
+                    Toast.makeText(requireContext(), "PTT timeout (30s limit)", Toast.LENGTH_SHORT).show()
+                    stopActualPTT()
+                }
+            }
+
+            // ✅ START ENHANCED PTT: Better quality, TURN support, 4G optimized
+            try {
+                Timber.d("🚀 Starting Enhanced PTT for room: ${timelineArgs.roomId}")
+                currentPttManager?.startEnhancedPttStreaming(timelineArgs.roomId)
+
+                withContext(Dispatchers.Main) {
+                    val waveAnimation = views.pttAndComposerContainer.findViewById<LottieAnimationView>(R.id.wave_animation_original)
+                    waveAnimation.visibility = View.VISIBLE
+                    waveAnimation.playAnimation()
+                    Toast.makeText(requireContext(), "🎤 Enhanced PTT active", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "❌ Failed to start Enhanced PTT")
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(requireContext(), "Failed to start PTT", Toast.LENGTH_SHORT).show()
+                }
+                return@launch
+            }
+        }
+    }
+
+    /**
+     * إيقاف PTT الفعلي
+     */
+    private fun stopActualPTT() {
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                Timber.d("🛑 Stopping Enhanced PTT for room: ${timelineArgs.roomId}")
+                currentPttManager?.stopEnhancedPttStreaming(timelineArgs.roomId)
+
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(requireContext(), "PTT message sent", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "❌ Failed to stop Enhanced PTT - using fallback")
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(requireContext(), "PTT stopped", Toast.LENGTH_SHORT).show()
+                }
+            } finally {
+                // ✅ تنظيف Manager بعد الإيقاف
+                currentPttManager?.clearTimeoutCallback()
+                currentPttManager = null
+            }
+        }
+    }
+
+    /* @SuppressLint("InflateParams", "ClickableViewAccessibility")
+     private fun setupPttButton() {
+         val btnRecord = views.pttAndComposerContainer.findViewById<ImageView>(R.id.btn_record_original)
+         val waveAnimation = views.pttAndComposerContainer.findViewById<LottieAnimationView>(R.id.wave_animation_original)
+
+         // Initialize Enhanced PTT Manager (make it accessible in both actions)
+         var enhancedPttManager: EnhancedPttManager? = null
+
+         btnRecord.setOnTouchListener { _, event ->
+             when (event.action) {
+                 MotionEvent.ACTION_DOWN -> {
+
+                     if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+                         requestVoicePermission {
+                             Toast.makeText(requireContext(), "Microphone permission granted. Press and hold to talk.", Toast.LENGTH_SHORT).show()
+                         }
+                         return@setOnTouchListener false
+                     }
+
+                     lifecycleScope.launch {
+                         // ✅ POLICE RADIO PROTOCOL: Check if channel is busy
+                         val (isBusy, currentSpeaker) = PttMatrixSyncHandler.isChannelBusy(timelineArgs.roomId, session.myUserId)
+                         if (isBusy && currentSpeaker != null) {
+                             withContext(Dispatchers.Main) {
+                                 Toast.makeText(requireContext(), "🚫 Channel busy - $currentSpeaker is speaking", Toast.LENGTH_SHORT).show()
+                             }
+                             Timber.w("🚫 POLICE RADIO: Channel busy - $currentSpeaker is speaking")
+                             return@launch
+                         }
+
+                         val room = session.getRoom(timelineArgs.roomId)
+                         val hasPermission = room?.let { hasPttPermission(it) } ?: false
+
+                         if (!hasPermission) {
+                             withContext(Dispatchers.Main) {
+                                 Toast.makeText(requireContext(), "You don't have permission to send PTT in this room.", Toast.LENGTH_LONG).show()
+                             }
+                             Timber.w("⛔️ User doesn't have Synapse permission to send PTT")
+                             return@launch
+                         }
+
+                         isPushToTalkDialogShowing = true
+
+                         // Initialize Enhanced PTT Manager
+                         enhancedPttManager = EnhancedPttManager(requireContext(), session)
+
+                         // Stop any existing receiver services
+                         val stopIntent = Intent(requireContext(), PttTcpReceiverService::class.java).apply {
+                             putExtra("roomId", timelineArgs.roomId)
+                         }
+                         requireContext().stopService(stopIntent)
+
+                         // ✅ Set up enhanced timeout callback
+                         enhancedPttManager?.setOnTimeoutCallback {
+                             requireActivity().runOnUiThread {
+                                 waveAnimation.pauseAnimation()
+                                 waveAnimation.visibility = View.GONE
+                                 isPushToTalkDialogShowing = false
+                                 Timber.d("⏰ Enhanced PTT timeout - wave animation stopped")
+                                 Toast.makeText(requireContext(), "PTT timeout (30s limit)", Toast.LENGTH_SHORT).show()
+                             }
+                         }
+
+                         // ✅ START ENHANCED PTT: Better quality, TURN support, 4G optimized
+                         try {
+                             Timber.d("🚀 Starting Enhanced PTT for room: ${timelineArgs.roomId}")
+                             enhancedPttManager?.startEnhancedPttStreaming(timelineArgs.roomId)
+
+                             withContext(Dispatchers.Main) {
+                                 waveAnimation.visibility = View.VISIBLE
+                                 waveAnimation.playAnimation()
+                                 Toast.makeText(requireContext(), "🎤 Enhanced PTT active", Toast.LENGTH_SHORT).show()
+                             }
+                         } catch (e: Exception) {
+                             Timber.e(e, "❌ Failed to start Enhanced PTT")
+                             withContext(Dispatchers.Main) {
+                                 Toast.makeText(requireContext(), "Failed to start PTT", Toast.LENGTH_SHORT).show()
+                             }
+                             return@launch
+                         }
+                     }
+
+                     true
+                 }
+
+                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                     if (!isPushToTalkDialogShowing) return@setOnTouchListener false
+
+                     // ✅ Clear enhanced timeout callback
+                     enhancedPttManager?.clearTimeoutCallback()
+
+                     // ✅ ENHANCED PTT STOP: Coordinated stop with voice message saving
+                     CoroutineScope(Dispatchers.IO).launch {
+                         try {
+                             Timber.d("🛑 Stopping Enhanced PTT for room: ${timelineArgs.roomId}")
+                             enhancedPttManager?.stopEnhancedPttStreaming(timelineArgs.roomId)
+
+                             withContext(Dispatchers.Main) {
+                                 Toast.makeText(requireContext(), "PTT message sent", Toast.LENGTH_SHORT).show()
+                             }
+                         } catch (e: Exception) {
+                             Timber.e(e, "❌ Failed to stop Enhanced PTT - using fallback")
+                             // Fallback to legacy method if needed
+                             enhancedPttManager?.stopStreaming()
+                             sendPttStatus("idle")
+                         }
+                     }
+                     // ✅ Clear timeout callback when stopping normally
+                     waveAnimation.pauseAnimation()
+                     isPushToTalkDialogShowing = false
+                     waveAnimation.visibility = View.GONE
+                     true
+                 }
+
+                 else -> false
+             }
+         }
+     }*/
 
     private fun sendPttStatus(status: String) {
         val content = mapOf(
@@ -645,32 +846,6 @@ class TimelineFragment :
                 }
                 timelineViewModel.handle(RoomDetailAction.RemoveWidget(jitsiWidgetId))
             }
-        }
-    }
-
-    fun autoPlayLatestVoiceMessage(event: TimelineEvent) {
-        Timber.d("🔵 autoPlayLatestVoiceMessage triggered for event: ${event.eventId}")
-
-        val audioUrl = event.root.content?.get("audio_url")?.toString()
-        if (!audioUrl.isNullOrEmpty()) {
-            val context = requireContext()
-            val intent = Intent(requireContext(), AudioPlaybackService::class.java).apply {
-                putExtra("audio_url", audioUrl)
-            }
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                ContextCompat.startForegroundService(context, intent)
-            } else {
-                context.startService(intent)
-            }
-        } else {
-            Timber.w("⚠️ autoPlayLatestVoiceMessage: No audio_url found, falling back to ViewModel")
-
-            // Fallback: if MessageAudioContent is parsed
-            val content = event.getLastMessageContent() as? MessageAudioContent ?: return
-            messageComposerViewModel.handle(
-                    MessageComposerAction.PlayOrPauseVoicePlayback(event.eventId, content)
-            )
         }
     }
 
@@ -931,6 +1106,10 @@ class TimelineFragment :
     }
 
     override fun onDestroy() {
+        countdownTimer?.cancel()
+        countdownTimer = null
+        currentPttManager?.stopEnhancedPttStreaming(timelineArgs.roomId)
+        currentPttManager = null
         timelineViewModel.handle(RoomDetailAction.ExitTrackingUnreadMessagesState)
         super.onDestroy()
     }
@@ -1105,7 +1284,6 @@ class TimelineFragment :
                 true
             }
             R.id.voice_sound -> {
-                callActionsHandler.onVoiceSoundClicked()
                 true
             }
             R.id.menu_timeline_thread_list -> {

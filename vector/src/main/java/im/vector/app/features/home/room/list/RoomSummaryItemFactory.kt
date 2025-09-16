@@ -202,17 +202,6 @@ class RoomSummaryItemFactory @Inject constructor(
             .useSingleLineForLastEvent(singleLineLastEvent)
             .itemLongClickListener { _ -> onLongClick?.invoke(roomSummary) ?: false }
             .itemClickListener { onClick?.invoke(roomSummary) }
-            .pttClickListener { action, roomId ->
-                when (action) {
-                    "ACTION_DOWN" -> listener?.onStartPtt(roomId)
-                    "ACTION_UP" -> listener?.onStopPtt(roomId)
-                    "TIMEOUT" -> {
-                        // Handle timeout - stop wave animation
-                        RoomSummaryItem.stopWaveAnimationForRoom(roomId)
-                        listener?.onPttTimeout(roomId)
-                    }
-                }
-            }
             .listener(listener)
 
     private fun createCenteredRoomSummaryItem(

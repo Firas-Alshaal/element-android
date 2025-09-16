@@ -7,25 +7,16 @@
 
 package im.vector.app.features.home.room.list
 
-import android.Manifest
 import android.annotation.SuppressLint
-import android.app.Activity
-import android.content.Context
-import android.content.pm.PackageManager
 import android.view.HapticFeedbackConstants
-import android.view.MotionEvent
 import android.view.View
-import android.widget.Button
 import android.widget.ImageView
 import android.widget.TextView
-import android.widget.Toast
 import androidx.constraintlayout.widget.ConstraintLayout
-import androidx.core.content.ContextCompat
 import androidx.core.view.isInvisible
 import androidx.core.view.isVisible
 import com.airbnb.epoxy.EpoxyAttribute
 import com.airbnb.epoxy.EpoxyModelClass
-import com.airbnb.lottie.LottieAnimationView
 import com.amulyakhare.textdrawable.TextDrawable
 import im.vector.app.R
 import im.vector.app.core.epoxy.ClickListener
@@ -43,33 +34,9 @@ import im.vector.lib.core.utils.epoxy.charsequence.EpoxyCharSequence
 import org.matrix.android.sdk.api.session.crypto.model.RoomEncryptionTrustLevel
 import org.matrix.android.sdk.api.session.presence.model.UserPresence
 import org.matrix.android.sdk.api.util.MatrixItem
-import timber.log.Timber
 
 @EpoxyModelClass
 abstract class RoomSummaryItem : VectorEpoxyModel<RoomSummaryItem.Holder>(R.layout.item_room) {
-
-    companion object {
-        // ✅ Static map to track active wave animations by room ID
-        private val activeWaveAnimations = mutableMapOf<String, LottieAnimationView>()
-        
-        fun stopWaveAnimationForRoom(roomId: String) {
-            activeWaveAnimations[roomId]?.let { waveAnimation ->
-                waveAnimation.pauseAnimation()
-                waveAnimation.visibility = View.GONE
-                activeWaveAnimations.remove(roomId)
-                Timber.d("⏰ Wave animation stopped due to 30-second timeout for room: $roomId")
-            }
-        }
-        
-        fun addWaveAnimation(roomId: String, waveAnimation: LottieAnimationView) {
-            activeWaveAnimations[roomId] = waveAnimation
-        }
-        
-        fun removeWaveAnimation(roomId: String) {
-            activeWaveAnimations.remove(roomId)
-        }
-    }
-
     @EpoxyAttribute
     lateinit var typingMessage: String
 
@@ -131,9 +98,6 @@ abstract class RoomSummaryItem : VectorEpoxyModel<RoomSummaryItem.Holder>(R.layo
     var useSingleLineForLastEvent: Boolean = false
 
     @EpoxyAttribute(EpoxyAttribute.Option.DoNotHash)
-    var pttClickListener: ((action: String, roomId: String) -> Unit)? = null
-
-    @EpoxyAttribute(EpoxyAttribute.Option.DoNotHash)
     var listener: RoomListListener? = null
 
     @SuppressLint("ClickableViewAccessibility")
@@ -156,71 +120,8 @@ abstract class RoomSummaryItem : VectorEpoxyModel<RoomSummaryItem.Holder>(R.layo
         holder.roomAvatarFailSendingImageView.isVisible = hasFailedSending
         renderSelection(holder, showSelected)
         holder.roomAvatarPresenceImageView.render(showPresence, userPresence)
-        /*holder.view.findViewById<Button>(R.id.btn_record_original_outside).setOnTouchListener { button, event ->
-            val waveAnimation = holder.view.findViewById<LottieAnimationView>(R.id.wave_animation_original_outside)
-            when (event.action) {
-                MotionEvent.ACTION_DOWN -> {
-                    if (!hasMicPermission(holder.view.context)) {
-                        listener?.requestVoicePermission(holder.view.context) { granted ->
-                            // Do nothing here! Just let the user press again after granting.
-                            if (!granted) {
-                                Toast.makeText(holder.view.context, "Microphone permission denied", Toast.LENGTH_SHORT).show()
-                                button.isPressed = false
-                            }
-                        }
-                        return@setOnTouchListener true
-                    }
-
-                    // If we reach here, mic permission is already granted
-                    listener?.checkPttPermissionAndStart(matrixItem.id) { hasSynapsePermission ->
-                        if (!hasSynapsePermission) {
-                            // Reset button state if Synapse permission denied
-                            button.isPressed = false
-                            return@checkPttPermissionAndStart
-                        }
-
-                        // Only start PTT if both permissions are granted
-                        listener?.onStartPtt(matrixItem.id)
-                        waveAnimation.apply {
-                            if (visibility != View.VISIBLE) visibility = View.VISIBLE
-                            if (!isAnimating) playAnimation()
-                        }
-                        
-                        // ✅ Add wave animation to tracking map
-                        addWaveAnimation(matrixItem.id, waveAnimation)
-                    }
-                    return@setOnTouchListener true
-                }
-
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                    Timber.d("📢 PTT Touch Up/Cancel on: ${matrixItem.id}")
-                    // Only stop PTT if we actually started it (animation is visible)
-                    if (waveAnimation.visibility == View.VISIBLE) {
-                        pttClickListener?.invoke("ACTION_UP", matrixItem.id)
-                    }
-                    waveAnimation.apply {
-                        if (isAnimating) pauseAnimation()
-                        if (visibility != View.GONE) visibility = View.GONE
-                    }
-                    // ✅ Remove wave animation from tracking map
-                    removeWaveAnimation(matrixItem.id)
-                    true // Consume the touch event
-                }
-
-                else -> false
-            }
-        }*/
         if (useSingleLineForLastEvent) {
             holder.subtitleView.setLines(1)
-        }
-    }
-
-    private fun startPtt(roomId: String, waveAnimation: LottieAnimationView) {
-        Timber.d("📢 PTT Touch Down on: $roomId")
-        pttClickListener?.invoke("ACTION_DOWN", roomId)
-        waveAnimation.apply {
-            if (visibility != View.VISIBLE) visibility = View.VISIBLE
-            if (!isAnimating) playAnimation()
         }
     }
 
@@ -246,8 +147,6 @@ abstract class RoomSummaryItem : VectorEpoxyModel<RoomSummaryItem.Holder>(R.layo
         holder.rootView.setOnClickListener(null)
         holder.rootView.setOnLongClickListener(null)
         avatarRenderer.clear(holder.avatarImageView)
-        // ✅ Remove wave animation from tracking when item is unbound
-        removeWaveAnimation(matrixItem.id)
         super.unbind(holder)
     }
 
@@ -261,10 +160,6 @@ abstract class RoomSummaryItem : VectorEpoxyModel<RoomSummaryItem.Holder>(R.layo
             holder.avatarCheckedImageView.visibility = View.GONE
             avatarRenderer.render(matrixItem, holder.avatarImageView)
         }
-    }
-
-    private fun hasMicPermission(context: Context): Boolean {
-        return ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
     }
 
     class Holder : VectorEpoxyHolder() {
