@@ -37,6 +37,7 @@ import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
 import kotlin.math.max
+import kotlin.math.pow
 
 /**
  * Enhanced PTT Manager with TURN server support and optimized audio quality
@@ -632,7 +633,6 @@ class EnhancedPttTcpSender(
     }
 }
 
-
 /**
  * Enhanced Matrix PTT Sender with audio data collection
  */
@@ -823,7 +823,6 @@ class EnhancedMatrixPttSender(
                         seq++
 
                         // ✅ ترميز Enhanced PCM+FEC إن أمكن، وإلا PCM
-
                         val (finalPayload, encoding) = run {
                             Timber.d("🔍 DEBUG: Payload size: ${payload.size}")
 
@@ -896,7 +895,7 @@ class EnhancedMatrixPttSender(
                                 Timber.d("🎉 First frame sent (${finalPayload.size}B, $encoding)")
                             } else if (packetCount <= 5 || packetCount % 10 == 0) {
                                 Timber.d(
-                                        "📤 frame#$packetCount seq=$seq bytes=${finalPayload.size} enc=$encoding net=${
+                                        "�� frame#$packetCount seq=$seq bytes=${finalPayload.size} enc=$encoding net=${
                                             NetworkAudioQualityManager.getCurrentNetworkType(
                                                     context
                                             )
@@ -984,30 +983,30 @@ class EnhancedMatrixPttSender(
         val avgAmplitude = samples.map { kotlin.math.abs(it.toInt()) }.average().toInt()
         val rmsAmplitude = kotlin.math.sqrt(samples.map { it.toDouble() * it.toDouble() }.average()).toInt()
 
-        Timber.d("🔍 Advanced analysis: max=$maxAmplitude, avg=$avgAmplitude, rms=$rmsAmplitude")
+        Timber.d("🔍 Pure analysis: max=$maxAmplitude, avg=$avgAmplitude, rms=$rmsAmplitude")
 
-        // ✅ تطبيق معالجة متقدمة حسب نوع البيانات
+        // ✅ تطبيق معالجة نقية حسب نوع البيانات
         when {
-            maxAmplitude < 50 -> {
-                // بيانات ضعيفة جداً - تطبيق gain معتدل مع noise reduction
-                applyGentleGain(samples, 1.3f)
-                applyNoiseReduction(samples, threshold = 50)
-                Timber.d("🔊 Weak audio - applied gentle gain + noise reduction")
+            maxAmplitude < 100 -> {
+                // بيانات ضعيفة جداً - تطبيق gain بسيط جداً
+                applyMinimalGain(samples, 1.05f) // ✅ تقليل من 1.1f إلى 1.05f
+                applyNoiseReduction(samples, threshold = 20) // ✅ تقليل من 30 إلى 20
+                Timber.d("🔊 Weak audio - applied minimal gain + noise reduction")
             }
-            maxAmplitude > 15000 -> {
-                // بيانات قوية - تطبيق soft clipping و noise reduction
-                applySoftClipping(samples, maxLevel = 15000)
-                applyNoiseReduction(samples, threshold = 100)
+            maxAmplitude > 20000 -> {
+                // بيانات قوية - تطبيق soft clipping فقط
+                applySoftClipping(samples, maxLevel = 16000) // ✅ تقليل من 18000 إلى 16000
+                applyNoiseReduction(samples, threshold = 40) // ✅ تقليل من 50 إلى 40
                 Timber.d("🔊 Strong audio - applied soft clipping + noise reduction")
             }
-            rmsAmplitude < 200 -> {
-                // بيانات متوسطة ضعيفة - تطبيق gain معتدل
-                applyGentleGain(samples, 1.2f)
-                Timber.d("🔊 Medium-weak audio - applied gentle gain")
+            avgAmplitude < 300 -> {
+                // بيانات متوسطة ضعيفة - تطبيق gain بسيط
+                applyMinimalGain(samples, 1.02f) // ✅ تقليل من 1.05f إلى 1.02f
+                Timber.d("🔊 Medium-weak audio - applied minimal gain")
             }
             else -> {
                 // بيانات جيدة - تطبيق noise reduction فقط
-                applyNoiseReduction(samples, threshold = 80)
+                applyNoiseReduction(samples, threshold = 30) // ✅ تقليل من 40 إلى 30
                 Timber.d("🔊 Good audio - applied noise reduction only")
             }
         }
@@ -1016,15 +1015,16 @@ class EnhancedMatrixPttSender(
         bb.asShortBuffer().put(samples)
     }
 
-    private fun applyGentleGain(samples: ShortArray, factor: Float) {
+    // ✅ تطبيق gain بسيط جداً بدون distortion
+    private fun applyMinimalGain(samples: ShortArray, factor: Float) {
         for (i in samples.indices) {
             val sample = samples[i].toFloat()
             val amplified = sample * factor
 
-            // ✅ تطبيق soft limiting بدلاً من hard clipping
+            // ✅ تطبيق soft limiting لطيف
             val limited = when {
-                amplified > 12000 -> 12000f + (amplified - 12000f) * 0.3f
-                amplified < -12000 -> -12000f + (amplified + 12000f) * 0.3f
+                amplified > 12000 -> 12000f + (amplified - 12000f) * 0.05f // ✅ تقليل من 0.1f إلى 0.05f
+                amplified < -12000 -> -12000f + (amplified + 12000f) * 0.05f // ✅ تقليل من 0.1f إلى 0.05f
                 else -> amplified
             }
 
@@ -1032,7 +1032,7 @@ class EnhancedMatrixPttSender(
         }
     }
 
-    // ✅ تطبيق soft clipping للقضاء على التشويش
+    // ✅ تطبيق soft clipping لطيف
     private fun applySoftClipping(samples: ShortArray, maxLevel: Int) {
         for (i in samples.indices) {
             val sample = samples[i].toFloat()
@@ -1042,21 +1042,21 @@ class EnhancedMatrixPttSender(
                 // ✅ تطبيق soft clipping باستخدام tanh
                 val sign = if (sample >= 0) 1f else -1f
                 val normalized = absSample / maxLevel
-                val clipped = kotlin.math.tanh(normalized) * maxLevel
+                val clipped = kotlin.math.tanh(normalized * 0.6f) * maxLevel // ✅ تقليل من 0.8f إلى 0.6f
                 samples[i] = (clipped * sign).toInt().toShort()
             }
         }
     }
 
-    // ✅ تطبيق noise reduction متقدم
+    // ✅ تطبيق noise reduction لطيف
     private fun applyNoiseReduction(samples: ShortArray, threshold: Int) {
         for (i in samples.indices) {
             val sample = samples[i].toFloat()
             val absSample = kotlin.math.abs(sample)
 
             if (absSample < threshold) {
-                // ✅ تطبيق fade-out بدلاً من قطع مفاجئ
-                val fadeFactor = absSample / threshold
+                // ✅ تطبيق fade-out لطيف
+                val fadeFactor = (absSample / threshold.toFloat()).toDouble().pow(0.3).toFloat() // ✅ تقليل من 0.5 إلى 0.3
                 samples[i] = (sample * fadeFactor).toInt().toShort()
             }
         }

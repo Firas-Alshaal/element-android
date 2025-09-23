@@ -53,7 +53,6 @@ class PttTcpReceiverService : Service() {
 
     private val jitterBuffer = LinkedBlockingQueue<ByteArray>(50)
 
-
     // ✅ إضافة متغيرات متكيفة مع الشبكة
     private var adaptiveSampleRate = sampleRate
     private var adaptiveBufferSize = audioBufferSize
@@ -67,7 +66,6 @@ class PttTcpReceiverService : Service() {
     private var myUserId: String? = null
     private var senderIp: String? = null
     private var currentSpeakerId: String? = null
-
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         currentRoomId = intent?.getStringExtra("roomId")
@@ -94,7 +92,6 @@ class PttTcpReceiverService : Service() {
         connectToSender()
         return START_STICKY
     }
-
 
     private fun connectToSender() {
         if (isRunning) return
@@ -257,7 +254,6 @@ class PttTcpReceiverService : Service() {
                                 if (validPackets % 25 == 0) {
                                     Timber.d("🎶 Receiver: processed $validPackets valid frames so far")
                                 }
-
                             } else if (read == 0) {
                                 noDataCounter++
                                 if (noDataCounter > 30) {
@@ -277,10 +273,18 @@ class PttTcpReceiverService : Service() {
 
                     Timber.d("Audio session ended - total packets: $receivedPackets, valid: $validPackets")
 
-                    try { audioTrack.stop() } catch (_: Throwable) {}
-                    try { audioTrack.release() } catch (_: Throwable) {}
-                    try { socket.close() } catch (_: Throwable) {}
-
+                    try {
+                        audioTrack.stop()
+                    } catch (_: Throwable) {
+                    }
+                    try {
+                        audioTrack.release()
+                    } catch (_: Throwable) {
+                    }
+                    try {
+                        socket.close()
+                    } catch (_: Throwable) {
+                    }
                 } catch (e: Exception) {
                     Timber.e("TCP Receiver error: ${e.message}")
                 } finally {
@@ -787,23 +791,23 @@ class MatrixPttReceiver(
         val avgAmplitude = shorts.map { kotlin.math.abs(it.toInt()) }.average().toInt()
         val rmsAmplitude = kotlin.math.sqrt(shorts.map { it.toDouble() * it.toDouble() }.average()).toInt()
 
-        Timber.d("🔍 Pure receiver analysis: max=$maxAmplitude, avg=$avgAmplitude, rms=$rmsAmplitude")
+        Timber.d("�� Pure receiver analysis: max=$maxAmplitude, avg=$avgAmplitude, rms=$rmsAmplitude")
 
         // ✅ تطبيق معالجة نقية حسب نوع البيانات
         when {
             maxAmplitude < 50 -> {
                 // بيانات ضعيفة جداً - تطبيق gain بسيط جداً
-                applyReceiverMinimalGain(shorts, 1.1f)
-                Timber.d("🔊 Receiver: Weak audio - applied minimal gain")
+                applyReceiverMinimalGain(shorts, 1.05f) // ✅ تقليل من 1.1f إلى 1.05f
+                Timber.d("�� Receiver: Weak audio - applied minimal gain")
             }
             maxAmplitude > 15000 -> {
                 // بيانات قوية - تطبيق soft clipping فقط
-                applyReceiverSoftClipping(shorts, maxLevel = 14000)
+                applyReceiverSoftClipping(shorts, maxLevel = 12000) // ✅ تقليل من 14000 إلى 12000
                 Timber.d("🔊 Receiver: Strong audio - applied soft clipping")
             }
             avgAmplitude < 200 -> {
                 // بيانات متوسطة ضعيفة - تطبيق gain بسيط
-                applyReceiverMinimalGain(shorts, 1.05f)
+                applyReceiverMinimalGain(shorts, 1.02f) // ✅ تقليل من 1.05f إلى 1.02f
                 Timber.d("🔊 Receiver: Medium-weak audio - applied minimal gain")
             }
             else -> {
@@ -813,7 +817,7 @@ class MatrixPttReceiver(
         }
 
         // ✅ تطبيق noise reduction لطيف
-        applyReceiverNoiseReduction(shorts, threshold = 30)
+        applyReceiverNoiseReduction(shorts, threshold = 20) // ✅ تقليل من 30 إلى 20
 
         val result = ByteArray(shorts.size * 2)
         val resultBuffer = java.nio.ByteBuffer.wrap(result).order(java.nio.ByteOrder.LITTLE_ENDIAN).asShortBuffer()
@@ -830,8 +834,8 @@ class MatrixPttReceiver(
 
             // ✅ تطبيق soft limiting لطيف
             val limited = when {
-                amplified > 12000 -> 12000f + (amplified - 12000f) * 0.1f
-                amplified < -12000 -> -12000f + (amplified + 12000f) * 0.1f
+                amplified > 10000 -> 10000f + (amplified - 10000f) * 0.05f // ✅ تقليل من 12000 إلى 10000 ومن 0.1f إلى 0.05f
+                amplified < -10000 -> -10000f + (amplified + 10000f) * 0.05f // ✅ تقليل من 12000 إلى 10000 ومن 0.1f إلى 0.05f
                 else -> amplified
             }
 
@@ -848,7 +852,7 @@ class MatrixPttReceiver(
             if (absSample > maxLevel) {
                 val sign = if (sample >= 0) 1f else -1f
                 val normalized = absSample / maxLevel
-                val clipped = kotlin.math.tanh(normalized * 0.7f) * maxLevel // ✅ تقليل tanh
+                val clipped = kotlin.math.tanh(normalized * 0.5f) * maxLevel // ✅ تقليل من 0.7f إلى 0.5f
                 samples[i] = (clipped * sign).toInt().toShort()
             }
         }
@@ -861,7 +865,7 @@ class MatrixPttReceiver(
             val absSample = abs(sample)
 
             if (absSample < threshold) {
-                val fadeFactor = (absSample / threshold.toFloat()).pow(0.3f)
+                val fadeFactor = (absSample / threshold.toFloat()).pow(0.2f) // ✅ تقليل من 0.3f إلى 0.2f
                 samples[i] = (sample * fadeFactor).toInt().toShort()
             }
         }
